@@ -56,12 +56,13 @@ FALLBACK_LISTS = {
     "mount": ["floor", "wall", "on", "under", "in", "part"],
     "faces": ["N", "NE", "E", "SE", "S", "SW", "W", "NW"],
     "yesno": ["yes", "no"],
-    "service_type": ["outlet", "strip", "gas", "vacuum", "air", "water", "drain", "network", "exhaust"],
+    "service_type": ["outlet", "strip", "gas", "vacuum", "air", "water", "drain", "network", "exhaust", "earth"],
     "door": ["left", "right", "both"],
     "level": ["problem", "warning"],
 }
-UTILITIES = ("gas", "vacuum", "air", "water", "drain", "network", "exhaust")  # what the needs column can ask for
-FALLBACK_LINK_LEN = {"usb": 500, "usb3": 300, "ethernet": 10000, "serial": 1500, "gpib": 200, "video": 500}
+UTILITIES = ("gas", "vacuum", "air", "water", "drain", "network", "exhaust", "earth")  # what the needs column can ask for
+FALLBACK_LINK_LEN = {"usb": 500, "usb3": 300, "ethernet": 10000, "serial": 1500, "gpib": 200, "video": 500,
+                     "coax": 500, "triax": 300, "fiber": 1000, "hv-cable": 300, "interlock": 1000, "vacuum-line": 200}
 SETTINGS = {  # the settings sheet can change these
     "walkway_width": 60, "reach": 30, "person_height": 200, "blocks_walking_below": 150,
     "circuit_limit": 80, "heavy_load": 1000, "grid": 5, "expiry_warning_days": 30,

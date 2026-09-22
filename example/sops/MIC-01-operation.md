@@ -22,7 +22,7 @@ reviewed: 2026-09-21
 ## Procedure
 
 1. Switch on the lamp, then start the camera software on [[LAP-02]].
-2. Place the slide, focus at low magnification, then move up.
+2. Place the sample, focus at low magnification, then move up.
 3. Use immersion oil only with the oil objective; wipe it off with lens paper when done.
 
 ## Shutdown

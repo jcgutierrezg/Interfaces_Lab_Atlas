@@ -125,7 +125,11 @@ FILL = {"bench": "#e9dcc3", "table": "#e9dcc3", "desk": "#e9dcc3", "instrument":
         "monitor": "#d9c9ef", "freezer": "#bfe8ec", "fridge": "#bfe8ec", "structure": "#9e9e9e", "safety": "#bfe3bf",
         "cabinet": "#d6d6d6", "shelf": "#d6d6d6", "pedestal": "#cfc3ad", "container": "#f0e0a0", "cart": "#f5c68f",
         "gas-cylinder": "#f3e37c", "sink": "#a9c9e0", "fume-hood": "#c9d3db", "door": "#ffffff", "window": "#ffffff",
-        "workspace": "none"}
+        "workspace": "none", "optical-table": "#dde3ea", "power-supply": "#bcd7f0", "measurement": "#bcd7f0",
+        "probe-station": "#a9c8ea", "sun-simulator": "#fde68a", "laser": "#fcd34d", "light-source": "#fde68a",
+        "spectrometer": "#bcd7f0", "microscope": "#bcd7f0", "dark-box": "#8b95a5", "glovebox": "#c9d3db",
+        "vacuum-chamber": "#cbd5e1", "vacuum-pump": "#cbd5e1", "corona-box": "#fecaca", "spin-coater": "#bcd7f0",
+        "hotplate": "#fed7aa", "oven": "#fed7aa", "chiller": "#bfe8ec", "ups": "#d9c9ef"}
 
 
 def esc(v):
@@ -201,7 +205,7 @@ def _flagged(lab, res):
 
 
 LEVELS = ("floor", "bench", "wall")
-SURFACES = {"bench", "desk", "table"}
+SURFACES = {"bench", "optical-table", "desk", "table"}
 
 
 def level_of(lab, res, i):
@@ -224,7 +228,7 @@ def level_of(lab, res, i):
 
 
 STACK_FILL = 0.2  # stack members above the bottom one: faint enough to read the labels below, filled enough to click
-FURNITURE = {"bench", "desk", "table", "shelf", "cabinet", "cart", "pedestal"}
+FURNITURE = {"bench", "optical-table", "desk", "table", "shelf", "cabinet", "cart", "pedestal"}
 
 
 def stack_pos(lab, i):
@@ -494,8 +498,9 @@ def _room_objects(lab, rid, flagged, sizes=None, lsizes=None, levels=None):
     return "".join(body), "".join(stage), extent, poly
 
 
-SVC_LETTER = {"gas": "G", "vacuum": "V", "air": "A", "water": "W", "drain": "D", "network": "N", "exhaust": "X"}
-SVC_FILL = {"gas": "#f3e37c", "vacuum": "#d0d5dd", "air": "#c7e3f5", "water": "#8ec5ea", "drain": "#b9c3cf",
+SVC_LETTER = {"gas": "G", "vacuum": "V", "air": "A", "water": "W", "drain": "D", "network": "N", "exhaust": "X",
+              "earth": "E"}
+SVC_FILL = {"earth": "#b7e4c7", "gas": "#f3e37c", "vacuum": "#d0d5dd", "air": "#c7e3f5", "water": "#8ec5ea", "drain": "#b9c3cf",
             "network": "#d9c9ef", "exhaust": "#e4e7ec"}
 
 

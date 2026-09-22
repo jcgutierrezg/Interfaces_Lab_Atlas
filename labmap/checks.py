@@ -16,9 +16,10 @@ from .model import Finding, stock
 
 NOT_OBSTACLES = {"door", "window", "workspace"}
 SPRINKLER_EXEMPT = {"door", "window", "structure", "overhead", "workspace"}  # built in, not stored or placed
-LINK_FOR = {"gas": {"gas-line"}, "vacuum": {"gas-line"}, "air": {"gas-line"}, "water": {"water-line"},
-            "drain": {"water-line"}, "exhaust": {"exhaust"}, "network": {"ethernet"}}  # links that meet a need
-STACKABLE = {"bench", "desk", "table", "shelf", "cabinet", "cart"}  # things may stand on these unless stackable = no
+LINK_FOR = {"gas": {"gas-line"}, "vacuum": {"vacuum-line", "gas-line"}, "air": {"gas-line"},
+            "water": {"water-line", "cooling-line"}, "drain": {"water-line"}, "exhaust": {"exhaust"},
+            "network": {"ethernet"}}  # links that meet a need
+STACKABLE = {"bench", "optical-table", "desk", "table", "shelf", "cabinet", "cart"}  # things may stand on these unless stackable = no
 
 RULES = {  # rule: (title, what it means, level). {placeholders} are settings.
     "data": ("Data problems", "Rows the checks couldn't use as they are. Fix these first: they can hide other problems.", "problem"),
@@ -44,7 +45,7 @@ RULES = {  # rule: (title, what it means, level). {placeholders} are settings.
                         "Must never lose power, but shares its circuit with something peaking at {heavy_load} W or more.", "problem"),
     "heat": ("Too much heat", "Equipment gives off more heat than the room's cooling can remove.", "problem"),
     "cable-reach": ("Too far apart", "The cable or tubing run is longer than allowed.", "problem"),
-    "utility": ("Service out of reach", "Needs gas, water, drain, vacuum, air, network or exhaust (needs column), and there "
+    "utility": ("Service out of reach", "Needs gas, water, drain, vacuum, air, network, exhaust or earth (needs column), and there "
                                        "isn't one within {utility_reach} cm, or a link to one.", "problem"),
     "socket-load": ("Socket or strip overloaded", "Running load above its rating_a.", "problem"),
     "keep-apart": ("Too close together", "Things the keep_apart sheet says must be kept apart, closer than allowed.",
@@ -439,8 +440,8 @@ def _keep_apart(res):
     tagged = {}
     for i, r in P.items():
         if geo.get(i) and geo[i].poly:
-            for t in r.get("tags") or []:
-                tagged.setdefault(t, []).append(i)
+            for t in set(r.get("tags") or []) | ({r["category"]} if r.get("category") else set()):
+                tagged.setdefault(t, []).append(i)  # its category counts as a tag: a rule can say "laser" or "door"
     seen = set()
     for rule in lab.keep_apart:
         a_tag, b_tag, dist = rule.get("tag"), rule.get("away_from"), rule.get("distance")

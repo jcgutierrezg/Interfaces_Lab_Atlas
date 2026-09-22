@@ -38,6 +38,16 @@ Agree on this before the walk-arounds, so everyone measures the same way. Whole 
 - **Benches and tables:** the top's height `h`; `free_under` at the **lowest** point underneath (rails, braces,
   drawer runners), not the middle.
 - **Equipment:** nameplate power; the services it needs besides power (`needs`); critical or not.
+- **Light, lasers, high voltage, vacuum** (this kind of lab):
+  - solar simulators and lamps: the lamp's power, the extraction it needs (xenon lamps make ozone:
+    `needs = exhaust`), and the room the beam and the hot housing need (`clear_front`, `clear_top`);
+  - lasers: the class (in `notes`), which way the beam points (`faces`), and anything it must stay away from;
+  - measurements that need the dark (dark I-V, PL, EQE) or low noise (SMUs at pA, electrometers, lock-ins): tag
+    them, so the lamps, lasers, pumps and high-voltage supplies around them are checked;
+  - corona boxes and high-voltage supplies: extraction for the ozone, and keep them clear of solvents;
+  - vacuum pumps: the exhaust line (oil mist), vibration and noise, and the hose length to what they pump
+    (a `vacuum-line` link);
+  - clean earth points (services, type `earth`), for low-noise measurements that need one (`needs = earth`).
 - **Fume hoods, biosafety cabinets, gloveboxes, ovens:** the outside (`w`, `d`, `h`) as usual, and the working
   space inside: `inner_w` (left to right), `inner_d` (sash to rear baffle), `inner_h` (above the work surface, up to
   the sash opening) and `inner_z` (the work surface's height above the floor).

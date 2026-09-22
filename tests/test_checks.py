@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 EXAMPLE = {  # example/README.md: the fourteen deliberate problems
     ("clear-zone", ("EYE-01", "CART-02")),
-    ("headroom", ("CEN-01", "SHELF-01")),
+    ("headroom", ("UVO-01", "SHELF-01")),
     ("overlap", ("BAL-01", "VORT-01")),
     ("under-fit", ("FRG-01", "BENCH-02")),
     ("outside-room", ("N2G-01",)),
@@ -20,12 +20,13 @@ EXAMPLE = {  # example/README.md: the fourteen deliberate problems
     ("heat", ("LAB-B",)),
     ("cable-reach", ("PC-01", "SPEC-01")),
     ("sprinkler", ("CAB-01", "LAB-A")),
-    ("utility", ("MS-01", "EXH-01")),
+    ("utility", ("SUN-01", "EXH-01")),
     ("socket-load", ("OUT-06",)),
-    ("document-unapproved", ("COSHH-022",)),  # the seven deliberate warnings
+    ("document-unapproved", ("RA-022",)),  # the eight deliberate warnings
     ("spare-out", ("I-0036",)),
     ("spare-low", ("I-0031",)),
-    ("keep-apart-near", ("PUMP-01", "BAL-01")),
+    ("keep-apart-near", ("VAC-01", "BAL-01")),
+    ("keep-apart-near", ("LED-01", "DARK-01")),
     ("door-fit", ("GB-01", "DOOR-02")),
     ("sash", ("HP-02", "HOOD-01")),
     ("left-behind", ("I-0051", "OVEN-01")),

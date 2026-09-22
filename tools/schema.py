@@ -63,7 +63,7 @@ PLACEABLES = [
     col("fill", "% full", "Containers only (drawer, shelf, cabinet, box): how full, 0-100, eyeballed. Finds consolidation opportunities.", False, "pct", 7),
     col("checked", "date", "Containers: date the contents were last verified against the items sheet. Shown in the directory.", False, "date", 11),
     col("decommissioned", "date it left", "Filled = it's gone. The row stays as a record (with its equipment row: asset tag, serial), but it's left out of the maps, the checks, the layout and the search. Its drawers and parts go with it. Anything still pointing at it is flagged, so nothing is left behind. Never reuse the ID.", False, "date", 12),
-    col("tags", "tags; separated; by ;", "What it is or does, for the keep_apart sheet: e.g. vibrates, vibration-sensitive, heat-source, flammable. Anything tagged there is kept at the distance it sets.", False, "text", 18),
+    col("tags", "tags; separated; by ;", "What it is or does, for the keep_apart sheet: vibrates, vibration-sensitive, emits-light, needs-dark, emi-source, emi-sensitive, heat-source, heat-sensitive, ignition-source, flammable, oxidiser, high-voltage, noisy, quiet. Its category counts as a tag too.", False, "text", 18),
     col("notes", "", "", False, "text", 40),
 ]
 
@@ -158,7 +158,7 @@ DOCUMENTS = [
 ]
 
 KEEP_APART = [
-    col("tag", "e.g. vibrates", "A tag used in the tags column of the placeables sheet.", True, "text", 22),
+    col("tag", "e.g. vibrates", "A tag used in the tags column of the placeables sheet, or a category (laser, door...).", True, "text", 22),
     col("away_from", "e.g. vibration-sensitive", "The tag it has to be kept away from.", True, "text", 22),
     col("distance", "cm", "Closest the two may be, edge to edge on the plan, cm.", True, "int", 9),
     col("level", "dropdown", "problem or warning.", True, "list:level", 9),
@@ -167,11 +167,20 @@ KEEP_APART = [
 DEFAULT_ROWS = {  # rows the empty template starts with too
     "keep_apart": [
         dict(tag="vibrates", away_from="vibration-sensitive", distance=100, level="warning",
-             why="balances and microscopes read wrong next to centrifuges, vacuum pumps and shakers"),
-        dict(tag="heat-source", away_from="heat-sensitive", distance=50, level="warning",
-             why="fridges, freezers and samples struggle next to ovens, hotplates and hot exhaust air"),
+             why="vacuum pumps, chillers and compressors shake probe stations, balances, microscopes and optics"),
+        dict(tag="emits-light", away_from="needs-dark", distance=200, level="warning",
+             why="stray light from solar simulators, lasers and lamps spoils dark and low-light measurements "
+                 "(dark I-V, PL, EQE): keep apart, or behind curtains or in a dark box"),
+        dict(tag="laser", away_from="door", distance=150, level="warning",
+             why="class 3B / 4 beams away from doorways, or behind interlocked curtains"),
+        dict(tag="emi-source", away_from="emi-sensitive", distance=150, level="warning",
+             why="motors, RF and high-voltage supplies couple noise into low-current measurements"),
+        dict(tag="ignition-source", away_from="flammable", distance=300, level="problem",
+             why="hotplates, furnaces, sparks and high voltage (corona) away from solvents"),
         dict(tag="flammable", away_from="oxidiser", distance=300, level="problem",
              why="flammables and oxidisers are stored apart, or in separate cabinets"),
+        dict(tag="heat-source", away_from="heat-sensitive", distance=50, level="warning",
+             why="samples, gloveboxes and fridges struggle next to furnaces, hotplates and lamp housings"),
         dict(tag="noisy", away_from="quiet", distance=200, level="warning",
              why="desks and write-up areas away from pumps and compressors"),
     ],

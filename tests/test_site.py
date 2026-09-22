@@ -50,7 +50,7 @@ class Directory(unittest.TestCase):
             self.assertIn(expected, text)
 
     def test_spare_parts_on_equipment_pages(self):
-        gc = (self.tmp / "o" / "GC-01.html").read_text(encoding="utf-8")
+        gc = (self.tmp / "o" / "CRYO-01.html").read_text(encoding="utf-8")
         self.assertIn("<h2 id='spares'>Spare parts</h2>", gc)
         self.assertIn("status bad'>none left", gc)  # GC inlet liners
         self.assertIn("href='https://uk.rs-online.com/web/c/?searchTerm=0000103'>RS 000-0103</a>", gc)

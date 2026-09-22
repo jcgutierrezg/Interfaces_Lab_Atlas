@@ -2,15 +2,33 @@
 
 LISTS = {
     "category": [
-        ("bench", "worktop / lab bench"), ("desk", "write-up or computer desk"),
-        ("table", "free-standing table, balance table"), ("cabinet", "floor-standing cupboard"),
-        ("shelf", "wall shelf or shelving unit"), ("drawer", "drawer (mount = in)"),
-        ("pedestal", "drawer unit, often on castors"), ("container", "box, bin or tray holding items"),
-        ("cart", "trolley"), ("instrument", "any instrument or device"),
-        ("computer", "PC, controller"), ("monitor", "screen"),
-        ("fridge", "fridge"), ("freezer", "-20, -80, LN2 dewar"),
-        ("fume-hood", "fume hood, extraction or biosafety cabinet"), ("sink", "sink bowl, drainer"),
-        ("gas-cylinder", "gas cylinder"), ("safety", "eyewash, shower, extinguisher, spill kit"),
+        # furniture: things stand on the first ones (bench ... cart, optical-table)
+        ("bench", "worktop / lab bench"), ("optical-table", "optical table or breadboard: things stand on it"),
+        ("desk", "write-up or computer desk"), ("table", "free-standing table"),
+        ("cabinet", "cupboard; solvent, acid or gas cabinet"), ("shelf", "wall shelf or shelving unit"),
+        ("drawer", "drawer (mount = in)"), ("pedestal", "drawer unit, often on castors"),
+        ("container", "box, bin or tray holding items"), ("cart", "trolley"),
+        # electrical test and measurement
+        ("power-supply", "DC or high-voltage supply, source-measure unit (SMU)"),
+        ("measurement", "oscilloscope, lock-in, LCR / impedance analyser, electrometer, logger"),
+        ("probe-station", "probe station, test fixture"),
+        # light and optics
+        ("sun-simulator", "solar simulator: xenon, LED or halogen"),
+        ("laser", "laser source: note its class in notes"), ("light-source", "lamp, LED or monochromator source"),
+        ("spectrometer", "UV-Vis, PL, EQE / IPCE, FTIR, Raman"), ("microscope", "optical microscope, AFM, SEM"),
+        ("dark-box", "light-tight measurement enclosure"),
+        # processing
+        ("glovebox", "inert-gas glovebox: give it inner_w/d/h/z"), ("fume-hood", "fume hood or extraction cabinet"),
+        ("vacuum-chamber", "evaporator, sputter coater, ALD, vacuum oven"),
+        ("vacuum-pump", "rotary, scroll or turbo pump"), ("corona-box", "corona charging box: high voltage, ozone"),
+        ("spin-coater", "spin coater"), ("hotplate", "hotplate, stirrer"), ("oven", "oven, furnace, annealing"),
+        ("chiller", "recirculating chiller"), ("instrument", "any other instrument or device"),
+        # computing and storage
+        ("computer", "PC, controller"), ("monitor", "screen"), ("ups", "uninterruptible power supply"),
+        ("fridge", "fridge: solvents, inks, samples"), ("freezer", "freezer: precursors, samples"),
+        ("gas-cylinder", "gas cylinder"),
+        # the building
+        ("sink", "sink bowl, drainer"), ("safety", "eyewash, shower, extinguisher, spill kit, emergency stop"),
         ("structure", "column, pipe boxing, radiator, electrical panel"), ("door", "door; clear_front = swing"),
         ("window", "mount = wall, z = sill height"), ("workspace", "working area that must stay clear"),
         ("overhead", "duct, beam, cable tray, light: mount = wall, z = underside"),
@@ -45,9 +63,11 @@ LISTS = {
     "service_type": [("outlet", "wall or spine socket"), ("strip", "power strip / extension lead"),
                      ("gas", "gas tap"), ("vacuum", "vacuum tap"), ("air", "compressed air"),
                      ("water", "water tap"), ("drain", "drain"), ("network", "network port"),
-                     ("exhaust", "extraction point / snorkel")],
-    "item_category": [("tool", ""), ("consumable", ""), ("glassware", ""), ("spare-part", ""),
-                      ("cable", ""), ("documentation", ""), ("other", "")],
+                     ("exhaust", "extraction point / snorkel"), ("earth", "clean earth / ground point")],
+    "item_category": [("tool", ""), ("consumable", ""), ("substrate", "wafers, glass, ITO / FTO slides"),
+                      ("optics", "lenses, filters, fibres, mirrors"), ("electronics", "components, connectors, probe tips"),
+                      ("chemical", "precursors, solvents: see the COSHH forms"), ("glassware", ""),
+                      ("spare-part", ""), ("cable", ""), ("documentation", ""), ("other", "")],
     "backed": [("none", "mains only"), ("ups", "on a UPS"), ("generator", "emergency generator")],
     "phase": [(1, ""), (3, "")],
     "doc_type": [("coshh", "COSHH assessment"), ("risk-assessment", ""), ("calibration", "calibration certificate"),
@@ -55,21 +75,28 @@ LISTS = {
                  ("other", "")],
     "doc_status": [("approved", ""), ("pending", "waiting for approval"), ("draft", ""), ("withdrawn", "")],
     "link_type": [("usb", 500), ("usb3", 300), ("ethernet", 10000), ("serial", 1500),
-                  ("gpib", 200), ("video", 500), ("gas-line", ""), ("water-line", ""),
-                  ("exhaust", ""), ("other", "")],
+                  ("gpib", 200), ("video", 500), ("coax", 500), ("triax", 300), ("fiber", 1000),
+                  ("hv-cable", 300), ("interlock", 1000), ("gas-line", ""), ("vacuum-line", 200),
+                  ("cooling-line", ""), ("water-line", ""), ("exhaust", ""), ("other", "")],
 }
 
 SECOND_HEADER = {"link_type": "default max_len, cm"}
 
 PREFIXES = [
-    ("BENCH", "bench / worktop"), ("DESK", "desk"), ("TBL", "table"), ("CAB", "cabinet"),
-    ("SHELF", "shelf / shelving unit"), ("PED", "drawer pedestal"), ("BOX", "box, bin, tray"),
-    ("CART", "cart / trolley"), ("FRG", "fridge"), ("FRZ", "freezer"), ("INC", "incubator"),
-    ("HOOD", "fume hood / cabinet"), ("SINK", "sink"), ("PC", "computer"), ("MON", "monitor"),
-    ("BAL", "balance"), ("CEN", "centrifuge"), ("SPEC", "spectrometer"), ("PUMP", "pump"),
+    ("BENCH", "bench / worktop"), ("OPT", "optical table / breadboard"), ("DESK", "desk"), ("TBL", "table"),
+    ("CAB", "cabinet"), ("SHELF", "shelf / shelving unit"), ("PED", "drawer pedestal"), ("BOX", "box, bin, tray"),
+    ("CART", "cart / trolley"),
+    ("SMU", "source-measure unit"), ("PSU", "power supply"), ("SCOPE", "oscilloscope"), ("LIA", "lock-in amplifier"),
+    ("PRB", "probe station"), ("SUN", "solar simulator"), ("LAS", "laser"), ("LED", "LED / lamp source"),
+    ("SPEC", "spectrometer"), ("EQE", "EQE / IPCE system"), ("MIC", "microscope"), ("DARK", "dark box"),
+    ("GB", "glovebox"), ("HOOD", "fume hood"), ("EVAP", "evaporator"), ("SPUT", "sputter coater"),
+    ("VAC", "vacuum pump"), ("COR", "corona box"), ("SPIN", "spin coater"), ("HP", "hotplate"),
+    ("OVEN", "oven"), ("FURN", "furnace"), ("CHIL", "chiller"), ("CRYO", "cryostat"),
+    ("PC", "computer"), ("MON", "monitor"), ("UPS", "UPS"), ("FRG", "fridge"), ("FRZ", "freezer"),
     ("GAS", "gas cylinder"), ("EYE", "eyewash"), ("COL", "column"), ("PANEL", "electrical panel"),
-    ("DOOR", "door"), ("WIN", "window"), ("WS", "workspace"),
+    ("DOOR", "door"), ("WIN", "window"), ("WS", "workspace"), ("DUCT", "duct / overhead"),
     ("OUT", "outlet"), ("STRIP", "power strip"), ("NET", "network port"), ("GASTAP", "gas tap"),
+    ("EXH", "extraction point"), ("EARTH", "earth point"),
     ("X.A  X.B", "parts of a composed object"), ("X.D1  X.D2", "drawers, numbered from the top"),
-    ("X.S1  X.S2", "shelves, numbered from the top"), ("I-0001", "items: just number them"),
+    ("X.S1  X.S2", "shelves, numbered from the top"), ("I-0001", "items: just number them")
 ]

@@ -79,7 +79,7 @@ class RoundTrip(unittest.TestCase):
 
         ids = re.findall(r'id="obj-([^"]+)"', self.path.read_text(encoding="utf-8"))
         self.assertEqual(len(ids), len(set(ids)))
-        self.assertTrue({"SPEC-02", "HPLC-01", "INC-01", "GB-01"} <= set(ids))  # both rooms, and the staged ones
+        self.assertTrue({"SPEC-02", "PRB-01", "OVEN-02", "GB-01"} <= set(ids))  # both rooms, and the staged ones
         self.assertEqual(set(self.rooms), {"LAB-A", "LAB-B"})
         self.assertEqual(sorted(p.name for p in self.path.parent.iterdir()), ["labs.svg"])
 
@@ -95,16 +95,16 @@ class RoundTrip(unittest.TestCase):
             "BENCH-01": lambda t: "translate(0,40) " + t,                   # the sink bench is fixed: ignored
         })
         inc = self.doc("LAB-A", 400, 100)
-        moves["INC-01"] = lambda t: f"translate({inc[0]:.1f},{inc[1]:.1f})"  # dragged in from the waiting area
+        moves["OVEN-02"] = lambda t: f"translate({inc[0]:.1f},{inc[1]:.1f})"  # dragged in from the waiting area
         moves.update(self.drag("CART-01", ((stage[0][0] + stage[2][0]) / 2, (stage[0][1] + stage[2][1]) / 2)))
         self.edit(moves)
         placed, _, notes = self.pull()
         self.assertEqual(placed["BENCH-02"], dict(x=595, y=180, faces="W"))
-        self.assertEqual(placed["INC-01"], dict(x=400, y=100, faces=None))
+        self.assertEqual(placed["OVEN-02"], dict(x=400, y=100, faces=None))
         self.assertEqual(placed["CART-01"], dict(x=None, y=None, faces=None))  # out to the waiting area
         self.assertEqual(placed["VORT-01"]["faces"], "W")
         self.assertTrue(any("BENCH-01 is fixed" in n for n in notes))
-        self.assertEqual(set(placed), {"BENCH-02", "VORT-01", "INC-01", "CART-01"})  # the rest came along unchanged
+        self.assertEqual(set(placed), {"BENCH-02", "VORT-01", "OVEN-02", "CART-01"})  # the rest came along unchanged
 
     def test_bench_moved_alone_leaves_its_things(self):
         self.edit({"BENCH-02": lambda t: "translate(-30,0) " + t})
@@ -162,13 +162,13 @@ class RoundTrip(unittest.TestCase):
 
     def test_layers_change_the_mount(self):
         # the arriving incubator, onto the central table: move it to 'on benches', then drag it there
-        self.relayer("INC-01", "on")
+        self.relayer("OVEN-02", "on")
         inc_to = self.centre("TBL-01")  # it's 70 x 70 and waiting unrotated: its corner goes 35 cm up and left
-        self.edit({"INC-01": lambda t: f"translate({inc_to[0] - 35:.1f},{inc_to[1] - 35:.1f})"})
+        self.edit({"OVEN-02": lambda t: f"translate({inc_to[0] - 35:.1f},{inc_to[1] - 35:.1f})"})
         self.relayer("FRZ-02", "floor")  # out from under the bench, where it is
         self.relayer("BIN-01", "under")  # the bin, under the table it already stands beneath
         placed, _, notes = self.pull()
-        self.assertEqual((placed["INC-01"]["mount"], placed["INC-01"]["parent"]), ("on", "TBL-01"))
+        self.assertEqual((placed["OVEN-02"]["mount"], placed["OVEN-02"]["parent"]), ("on", "TBL-01"))
         self.assertEqual((placed["FRZ-02"]["mount"], placed["FRZ-02"]["parent"]), ("floor", None))
         self.assertEqual((placed["BIN-01"]["mount"], placed["BIN-01"]["parent"]), ("under", "TBL-01"))
         self.assertTrue(any("FRZ-02 was moved to the 'floor and benches' layer" in n for n in notes))

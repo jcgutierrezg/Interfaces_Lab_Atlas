@@ -26,19 +26,20 @@ measuring error and ventilation, under benches, below the ceiling and through do
 safety office's numbers.
 
 `python -m unittest discover -s tests -t .` confirms the example still produces exactly its fourteen problems and
-seven warnings.
+eight warnings.
 
 
 ## The example
 
-`example/` is a complete, fictional two-room lab: a 720 × 540 cm wet lab (`LAB-A`) and an L-shaped instrument room
-with a chamfered corner, a column and a pilaster (`LAB-B`). It has 116 placeables, 44 pieces of equipment, sockets,
+`example/` is a complete, fictional two-room lab for thin-film photovoltaics and electronic interfaces: a 720 ×
+540 cm device fabrication lab (`LAB-A`) and an L-shaped characterisation lab with a chamfered corner, a column and
+a pilaster (`LAB-B`). It has 116 placeables, 44 pieces of equipment, sockets,
 circuits, links, 51 items, SOPs and placeholder photos, covering every case in these pages.
 
-It also contains **exactly fourteen deliberate problems and seven deliberate warnings**, each testing a different
+It also contains **exactly fourteen deliberate problems and eight deliberate warnings**, each testing a different
 rule. The problems: a blocked clear zone, a lid hitting a shelf, an overlap, a fridge too tall for the space under
 a bench, an object outside the room, a cabinet too close to the sprinklers, too many plugs on a socket, a strip plugged into a strip, an overloaded socket, an overloaded circuit, a critical freezer on a shared
-circuit, too much heat for the cooling, a USB run that's too long, and an exhaust point out of reach. The warnings:
-a pending COSHH form, a spare part out of stock, one running low, a vacuum pump next to a balance, a glovebox
-too big for the door, a hotplate too close to a fume hood's sash, and a spare part still listed for an oven that's
-been decommissioned. [example/README.md](../example/README.md) lists each one with the exact expected finding, and the rules behind them.
+circuit, too much heat for the cooling, a USB run that's too long, and a solar simulator with no extraction
+within reach. The warnings: a pending risk assessment, a spare part out of stock, one running low, a vacuum pump
+next to a balance, an LED source too close to a dark box, a glovebox too big for the door, a hotplate too close to
+a fume hood's sash, and a spare part still listed for an oven that's been decommissioned. [example/README.md](../example/README.md) lists each one with the exact expected finding, and the rules behind them.

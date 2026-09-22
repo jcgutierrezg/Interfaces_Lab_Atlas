@@ -34,14 +34,19 @@ thing itself.
 
 ## Equipment: an instrument, computer, fridge, freezer
 
-1. `placeables`: as for furniture, with its `category` (instrument, computer, freezer...). Standing on a bench:
+1. `placeables`: as for furniture, with its `category`: power-supply, measurement, probe-station, sun-simulator,
+   laser, light-source, spectrometer, microscope, dark-box, glovebox, vacuum-chamber, vacuum-pump, corona-box,
+   spin-coater, hotplate, oven, chiller, computer... (the full list, with what each covers, is on the `lists`
+   sheet; `instrument` for anything else). An optical table is furniture: things stand on it. Standing on a bench:
    `mount = on` (leave `parent` blank: dropping it on a bench in the layout fills it in). Under a bench: `mount =
    under`. On the floor: `mount = floor`. Fridges, freezers, cabinets: `door` = the hinge side.
 2. `equipment` sheet, same `id`: maker, model, serial, asset tag, owner; `plan`, `usage`; `plugs`, `watts_typ`,
    `watts_max`, `critical`; `needs` (gas, water, drain, exhaust, network, e.g. `exhaust; gas:N2`); `outlet` only
    if you know which socket it's in (blank = the nearest).
-3. Anything that must stay close to another instrument (USB, GPIB, gas line): a row on the `links` sheet.
-4. Vibrates, sensitive to vibration, gives off heat, flammable...: `tags` (see [Doors and keeping things apart](spreadsheet-reference.md#doors-and-keeping-things-apart)).
+3. Anything that must stay close to another instrument: a row on the `links` sheet (USB, GPIB, coax, triax,
+   optical fibre, HV cable, interlock, gas, vacuum or cooling line).
+4. Emits light or needs the dark, vibrates or is sensitive to it, electrically noisy or sensitive to noise, hot,
+   a source of ignition, flammable...: `tags` (see [Doors and keeping things apart](spreadsheet-reference.md#doors-and-keeping-things-apart)).
 5. Stacked on another instrument (SMUs): `mount = on`, `parent` = the one below, and `stackable = yes` on the one
    below. Or drop it on top of it in the layout.
 6. Arriving but not here yet: `plan = new`, no `x`/`y`. The report warns if it won't fit through the door.
@@ -88,8 +93,8 @@ thing itself.
 
 ## An SOP
 
-1. Copy `sops/_TEMPLATE.md` to `sops/<ID>-<topic>.md` in your data folder (e.g. `CEN-01-operation.md`).
-2. Fill in the top: `title`, and `equipment: [CEN-01]` (every ID it applies to). It then shows on each of their
+1. Copy `sops/_TEMPLATE.md` to `sops/<ID>-<topic>.md` in your data folder (e.g. `UVO-01-operation.md`).
+2. Fill in the top: `title`, and `equipment: [UVO-01]` (every ID it applies to). It then shows on each of their
    pages. Write `[[ID]]` anywhere in the text to link to an object, drawer, socket or item.
 3. To retire one, rename it with a leading `_`: the directory skips it.
 

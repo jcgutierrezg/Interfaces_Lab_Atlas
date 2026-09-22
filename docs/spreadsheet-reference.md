@@ -149,11 +149,27 @@ the headroom you need (see `WS-01`).
 - **Doors on things:** see [Measuring protocol](collecting-data.md#measuring-protocol). For the room's own doors, a `door`-category object: its `w` and `h`
   are the clear opening. Anything arriving or moving (`plan` = new or relocate) that can't pass through any door of
   its room, even on its side, is a warning.
-- **Keeping things apart:** tag objects (`tags` on the placeables sheet: `vibrates`, `vibration-sensitive`,
-  `heat-source`, `flammable`...) and the **`keep_apart`** sheet says which tags must be how far apart, edge to edge,
-  and whether that's a problem or a warning. It starts with vibration, heat, flammables/oxidisers and noise; add
-  your own rows.
-- **Services other than power:** `needs` on the equipment sheet (`exhaust; gas:N2; network`) is checked against the
+- **Keeping things apart:** tag objects (`tags` on the placeables sheet) and the **`keep_apart`** sheet says which
+  tags must be how far apart, edge to edge, and whether that's a problem or a warning. An object's **category counts
+  as a tag too**, so a rule can name `laser` or `door` without tagging anything. The sheet starts with:
+
+  | Tag | Away from | Distance | Level | Why |
+  |---|---|---|---|---|
+  | `vibrates` | `vibration-sensitive` | 100 cm | warning | pumps and chillers shake probe stations, balances, microscopes, optics |
+  | `emits-light` | `needs-dark` | 200 cm | warning | stray light from solar simulators, lasers and lamps spoils dark I-V, PL, EQE |
+  | `laser` (category) | `door` (category) | 150 cm | warning | class 3B / 4 beams away from doorways, or behind interlocked curtains |
+  | `emi-source` | `emi-sensitive` | 150 cm | warning | motors, RF and high-voltage supplies add noise to low-current measurements |
+  | `ignition-source` | `flammable` | 300 cm | problem | hotplates, furnaces, corona and sparks away from solvents |
+  | `flammable` | `oxidiser` | 300 cm | problem | stored apart, or in separate cabinets |
+  | `heat-source` | `heat-sensitive` | 50 cm | warning | samples, gloveboxes and fridges next to furnaces and lamp housings |
+  | `noisy` | `quiet` | 200 cm | warning | desks and write-up areas away from pumps and compressors |
+
+  Typical tags: a solar simulator `emits-light; heat-source`; a laser or LED source `emits-light`; a dark box or
+  PL / EQE setup `needs-dark`; a vacuum pump `vibrates; noisy; emi-source`; a corona box `high-voltage;
+  ignition-source; emi-source`; SMUs, electrometers and lock-ins `emi-sensitive`; a probe station or optical table
+  `vibration-sensitive`; hotplates and furnaces `heat-source; ignition-source`; a solvent cabinet `flammable`. Add
+  your own tags and rows.
+- **Services other than power:** `needs` on the equipment sheet (`exhaust; gas:N2; network; earth`) is checked against the
   taps, ports and extraction points on the services sheet within `utility_reach` (3 m). A link on the links sheet
   (gas-line, water-line, exhaust, ethernet) counts too: a GC plumbed to its own cylinders needs no gas tap.
 

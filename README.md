@@ -10,6 +10,11 @@ lives. Three things are generated from it:
 - **a searchable lab directory** for everyone: where every instrument, drawer and item is, with photos, SOPs,
   forms and spare parts.
 
+It's set up for an **electronic interfaces and photovoltaics lab**: categories for solar simulators, lasers, light
+sources, dark boxes, probe stations, power supplies, corona boxes, gloveboxes and vacuum pumps; rules that keep
+light away from dark measurements, noise away from low-current ones, and ignition sources away from solvents. All of
+it is editable on the spreadsheet's `lists` and `keep_apart` sheets.
+
 **You edit** one **data folder**, kept outside this repository (e.g. a synced Teams folder): `lab-data.xlsx`, the
 room outlines in `rooms/`, SOPs in `sops/` and photos in `photos/`. **This repository** holds the tools, the empty
 templates and a fictional example. **Everything generated** goes to the data folder's `build/`.
