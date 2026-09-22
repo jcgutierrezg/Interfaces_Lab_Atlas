@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!--
+  ROOM SHELL TEMPLATE  (1 unit = 1 cm, real scale)
+
+  1. Save a copy as rooms/<ROOM-ID>.svg: the same name as the "shell" column in lab-data.xlsx.
+  2. Optional: import a scan or PDF of the floor plan into the "reference" layer, scale it until
+     a wall you know measures right (Measure tool, M), then lock the layer.
+  3. Make the path with id "interior" follow the INSIDE face of the walls. Easiest way:
+     Edit > XML Editor (Ctrl+Shift+X), select "interior", and type the outline in cm:
+       square corners:              M 0,0 H 600 V 400 H 0 Z
+       top-left corner chamfered:   M 60,0 H 600 V 400 H 0 V 60 Z      (the final Z draws the diagonal)
+       top-right corner chamfered:  M 0,0 H 540 L 600,60 V 400 H 0 Z   (L x,y draws a diagonal anywhere)
+     H = go across to x, V = go up/down to y, L = go straight to x,y, Z = close back to the start.
+     The top-left of its bounding box must stay at 0,0: that is the room's origin.
+  4. The grey "walls" band is decoration only: reshape it to match or delete it.
+  5. Do NOT draw doors, windows, sinks, sockets or furniture here. Those are rows in lab-data.xlsx,
+     so the checks can see them. This file is only the empty room.
+  6. Save as "Inkscape SVG" (the default). Never "Optimized SVG": it can strip the ids.
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+     xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+     width="700cm" height="530cm" viewBox="-50 -60 700 530">
+  <title>ROOM-ID shell</title>
+  <sodipodi:namedview id="namedview" pagecolor="#ffffff" bordercolor="#666666"
+                      inkscape:document-units="cm" showgrid="true">
+    <inkscape:grid id="grid-10cm" type="xygrid" units="cm" originx="0" originy="0"
+                   spacingx="10" spacingy="10" empspacing="10" visible="true" enabled="true"
+                   color="#3f7fbf" opacity="0.12" empcolor="#3f7fbf" empopacity="0.3"/>
+  </sodipodi:namedview>
+
+  <g id="layer-reference" inkscape:groupmode="layer" sodipodi:insensitive="true"
+     inkscape:label="reference (trace over a scan, then lock)"/>
+
+  <g id="layer-walls" inkscape:groupmode="layer" inkscape:label="walls">
+    <path id="walls" d="M -15,-15 H 615 V 415 H -15 Z M 0,0 H 600 V 400 H 0 Z"
+          fill="#b8b8b8" fill-rule="evenodd" stroke="none"/>
+    <path id="interior" d="M 0,0 H 600 V 400 H 0 Z" fill="none" stroke="#1f1f1f" stroke-width="1.2"/>
+  </g>
+
+  <g id="layer-notes" inkscape:groupmode="layer" inkscape:label="notes" font-family="sans-serif">
+    <text x="0" y="-30" font-size="20" font-weight="bold" fill="#1f1f1f">ROOM-ID · Room name</text>
+    <text x="600" y="-30" font-size="13" fill="#595959" text-anchor="end">↑ N = top of the drawing (not compass north)</text>
+    <circle cx="0" cy="0" r="4" fill="#c00000"/>
+    <text x="8" y="20" font-size="12" fill="#c00000">0,0</text>
+    <g id="scale-bar" font-size="12" fill="#1f1f1f">
+      <rect x="0" y="435" width="50" height="6"/>
+      <rect x="50" y="435" width="50" height="6" fill="#ffffff" stroke="#1f1f1f" stroke-width="1"/>
+      <text x="0" y="456">0</text>
+      <text x="100" y="456" text-anchor="middle">1 m</text>
+    </g>
+  </g>
+</svg>

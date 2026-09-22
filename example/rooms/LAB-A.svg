@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!--
+  EXAMPLE room shell: LAB-A, a plain 720 x 540 cm rectangle (1 unit = 1 cm).
+  Only the empty room lives here. The door, window, column, fume hood, sink and every other object
+  are rows in example/lab-data.xlsx, so the checks can see them. See rooms/_TEMPLATE.svg for how to draw one.
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+     xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+     width="820cm" height="680cm" viewBox="-50 -60 820 680">
+  <title>LAB-A shell</title>
+  <sodipodi:namedview id="namedview" pagecolor="#ffffff" bordercolor="#666666"
+                      inkscape:document-units="cm" showgrid="true">
+    <inkscape:grid id="grid-10cm" type="xygrid" units="cm" originx="0" originy="0"
+                   spacingx="10" spacingy="10" empspacing="10" visible="true" enabled="true"
+                   color="#3f7fbf" opacity="0.12" empcolor="#3f7fbf" empopacity="0.3"/>
+  </sodipodi:namedview>
+
+  <g id="layer-reference" inkscape:groupmode="layer" sodipodi:insensitive="true"
+     inkscape:label="reference (trace over a scan, then lock)"/>
+
+  <g id="layer-walls" inkscape:groupmode="layer" inkscape:label="walls">
+    <path id="walls" d="M -15,-15 H 735 V 555 H -15 Z M 0,0 H 720 V 540 H 0 Z"
+          fill="#b8b8b8" fill-rule="evenodd" stroke="none"/>
+    <path id="interior" d="M 0,0 H 720 V 540 H 0 Z" fill="none" stroke="#1f1f1f" stroke-width="1.2"/>
+  </g>
+
+  <g id="layer-notes" inkscape:groupmode="layer" inkscape:label="notes" font-family="sans-serif">
+    <text x="0" y="-30" font-size="20" font-weight="bold" fill="#1f1f1f">LAB-A · Wet lab (EXAMPLE)</text>
+    <text x="720" y="-30" font-size="13" fill="#595959" text-anchor="end">↑ N = top of the drawing (not compass north)</text>
+    <circle cx="0" cy="0" r="4" fill="#c00000"/>
+    <text x="8" y="20" font-size="12" fill="#c00000">0,0</text>
+    <g id="scale-bar" font-size="12" fill="#1f1f1f">
+      <rect x="0" y="575" width="50" height="6"/>
+      <rect x="50" y="575" width="50" height="6" fill="#ffffff" stroke="#1f1f1f" stroke-width="1"/>
+      <text x="0" y="596">0</text>
+      <text x="100" y="596" text-anchor="middle">1 m</text>
+    </g>
+  </g>
+</svg>

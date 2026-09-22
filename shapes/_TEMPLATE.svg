@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!--
+  SHAPE PROFILE TEMPLATE  (1 unit = 1 cm)
+  Only for the rare object that is not a rectangle, not a circle, and not a group of rectangles.
+  L, U and T benches: use shape = group with rectangular parts. Benches along a chamfered corner:
+  a group with a diagonal part (faces NE/SE/SW/NW). See the README for both.
+
+  1. Save a copy as shapes/<name>.svg, then set shape = @<name> on the placeables row(s).
+     One profile can serve every identical unit.
+  2. Draw the object seen from above with its FRONT (the side you use) at the BOTTOM.
+     0,0 = the back-left corner of its bounding box.
+  3. id "footprint" (required): the outline. Its bounding box must match w x d on the row:
+     w across, d from the back (top) to the front (bottom).
+  4. id "clearance" (optional): if present, it REPLACES the clear_* columns. Draw exactly the
+     area that must stay free: standing room, door swings, pull-outs.
+  5. Everything else in the file (notes, dimensions) is ignored by the scripts.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="140cm" height="170cm" viewBox="-20 -25 140 170">
+  <title>shape profile template</title>
+  <path id="footprint" d="M 0,0 H 100 V 60 H 0 Z" fill="#9dc3e6" stroke="#1f4e79" stroke-width="0.8"/>
+  <path id="clearance" d="M 0,60 H 100 V 140 H 0 Z" fill="none" stroke="#c00000" stroke-width="0.8"
+        stroke-dasharray="4 3"/>
+  <g id="notes" font-family="sans-serif" font-size="7">
+    <circle cx="0" cy="0" r="1.8" fill="#c00000"/>
+    <text x="0" y="-6" fill="#595959">0,0 · back</text>
+    <text x="50" y="32" text-anchor="middle" fill="#1f4e79">footprint (w 100 × d 60)</text>
+    <text x="50" y="57" text-anchor="middle" fill="#1f4e79" font-size="5.5">front</text>
+    <text x="50" y="102" text-anchor="middle" fill="#c00000">clearance (optional)</text>
+  </g>
+</svg>

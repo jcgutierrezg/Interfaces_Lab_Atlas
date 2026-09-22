@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!--
+  EXAMPLE room shell: LAB-B (1 unit = 1 cm). An L-shaped instrument room, 780 x 600 cm bounding box:
+  top-right corner chamfered 60 cm each way, bottom-right corner (x 540-780, y 420-600) not part of the room.
+  The "interior" path is what the checks treat as usable floor, so anything placed in the missing corner
+  or across the chamfer is flagged as outside the room. The column and the pilaster are rows in the data.
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+     xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+     width="895cm" height="755cm" viewBox="-50 -60 895 755">
+  <title>LAB-B shell</title>
+  <sodipodi:namedview id="namedview" pagecolor="#ffffff" bordercolor="#666666"
+                      inkscape:document-units="cm" showgrid="true">
+    <inkscape:grid id="grid-10cm" type="xygrid" units="cm" originx="0" originy="0"
+                   spacingx="10" spacingy="10" empspacing="10" visible="true" enabled="true"
+                   color="#3f7fbf" opacity="0.12" empcolor="#3f7fbf" empopacity="0.3"/>
+  </sodipodi:namedview>
+
+  <g id="layer-reference" inkscape:groupmode="layer" sodipodi:insensitive="true"
+     inkscape:label="reference (trace over a scan, then lock)"/>
+
+  <g id="layer-walls" inkscape:groupmode="layer" inkscape:label="walls">
+    <path id="walls"
+          d="M -15,-15 H 726.2 L 795,53.8 V 435 H 555 V 615 H -15 Z M 0,0 H 720 L 780,60 V 420 H 540 V 600 H 0 Z"
+          fill="#b8b8b8" fill-rule="evenodd" stroke="none"/>
+    <path id="interior" d="M 0,0 H 720 L 780,60 V 420 H 540 V 600 H 0 Z" fill="none" stroke="#1f1f1f"
+          stroke-width="1.2"/>
+  </g>
+
+  <g id="layer-notes" inkscape:groupmode="layer" inkscape:label="notes" font-family="sans-serif">
+    <text x="0" y="-30" font-size="20" font-weight="bold" fill="#1f1f1f">LAB-B · Instrument room (EXAMPLE)</text>
+    <text x="780" y="-30" font-size="13" fill="#595959" text-anchor="end">↑ N = top of the drawing (not compass north)</text>
+    <circle cx="0" cy="0" r="4" fill="#c00000"/>
+    <text x="8" y="20" font-size="12" fill="#c00000">0,0</text>
+    <text x="675" y="515" font-size="12" fill="#7f7f7f" font-style="italic" text-anchor="middle">outside the room</text>
+    <text x="675" y="532" font-size="12" fill="#7f7f7f" font-style="italic" text-anchor="middle">(interior path is an L)</text>
+    <g id="scale-bar" font-size="12" fill="#1f1f1f">
+      <rect x="0" y="640" width="50" height="6"/>
+      <rect x="50" y="640" width="50" height="6" fill="#ffffff" stroke="#1f1f1f" stroke-width="1"/>
+      <text x="0" y="661">0</text>
+      <text x="100" y="661" text-anchor="middle">1 m</text>
+    </g>
+  </g>
+</svg>
