@@ -10,6 +10,7 @@ from __future__ import annotations
 import copy
 import html
 import math
+import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -561,6 +562,11 @@ def drawing(lab, res, rid, flag=True):
 
 LAYERS = (("floor", "floor and benches"), ("under", "under benches"), ("on", "on benches"),
           ("wall", "walls and shelves"))
+LAYOUT_FILE = "labs.svg"
+ROOM_GAP = 150  # cm between rooms in the combined layout
+STAGE_MIN = (150, 200)  # cm: smallest "not placed yet" area, so there's always somewhere to drag things out to
+MOVE_SHEETS = ("placeables", "services", "equipment")  # what a pull can change
+LAYER_MOUNT = {"floor": "floor", "under": "under", "on": "on"}  # moved to this layer in Inkscape: mounted like this
 
 
 def abs_matrix(lab, i):
@@ -591,108 +597,186 @@ def _depth(lab, i):
     return n
 
 
-def editable(lab, res, rid):
-    """The layout file for Inkscape: the room outline file's layers, locked, plus one layer of objects per level.
+def _room_poly(room):
+    w, d = room.get("width") or 500, room.get("depth") or 400
+    return room.get("poly") or [(0, 0), (w, 0), (w, d), (0, d)]
 
-    Every object is its own top-level group (a group's parts stay inside it), placed in room coordinates, so any of
-    them can be clicked and dragged, including onto another bench: pull works out what it now stands on.
-    """
+
+def _shell(lab, rid):
+    """(the room outline file's root element, its viewBox as (x0, y0, x1, y1)) or (None, None)."""
+    shell = lab.folder / "rooms" / (lab.rooms[rid].get("shell") or "")
+    if not shell.is_file():
+        return None, None
+    src = ET.parse(shell).getroot()
+    vb = [float(n) for n in svg.NUM.findall(src.get("viewBox") or "")]
+    return src, ((vb[0], vb[1], vb[0] + vb[2], vb[1] + vb[3]) if len(vb) == 4 else None)
+
+
+def _block(lab, rid):
+    """One room's part of the combined layout, in room coordinates: its objects, its staging area, its extent."""
     P = lab.placeables
-    flagged = _flagged(lab, res)
-    sizes = label_plan(lab, res, rid, LABEL_MIN["layout"], covered=True)
-    room = lab.rooms[rid]
-    poly = room.get("poly") or [(0, 0), (room.get("width") or 500, 0),
-                                (room.get("width") or 500, room.get("depth") or 400), (0, room.get("depth") or 400)]
+    poly = _room_poly(lab.rooms[rid])
     x0, y0, x1, y1 = G.bbox(poly)
     ids = [i for i, r in P.items() if r.get("room") == rid and r.get("mount") in ("floor", "wall", "on", "under")]
-
-    def layer(i):
-        return layout_layer(lab, res, i)
 
     def order(i):
         r, pts = P[i], outline(lab, i) or [(0, 0)]
         z = (r.get("z") or 0) if r.get("mount") == "wall" else 0
         return (_depth(lab, i), z >= OVERHEAD, z, -abs(G.area(pts)) if len(pts) > 2 else 0)
 
-    layers = {k: [] for k, _ in LAYERS}
-    staged = []
+    placed, staged = [], []
+    sx, sy, sw = x1 + STAGE_GAP, y0 + 30, 0
     for i in sorted(ids, key=order):
         m = abs_matrix(lab, i)
-        if m is None:
-            staged.append(i)
+        if m is not None:
+            placed.append((i, m))
             continue
-        ang = round(math.degrees(math.atan2(m[1], m[0]))) % 360
-        layers[layer(i)].append(_object(lab, i, (m[4], m[5]), ang, ang, flagged, sizes=sizes, nest=False))
-    sx, sy, sw = x1 + STAGE_GAP, y0 + 25, 0
-    for i in staged:
         pts = outline(lab, i)
         if not pts:
             continue
         bx0, by0, bx1, by1 = G.bbox(pts)
-        layers[layer(i)].append(_object(lab, i, (sx - bx0, sy - by0), 0, 0, flagged, unplaced=True, nest=False))
+        staged.append((i, (sx - bx0, sy - by0)))
         sy += by1 - by0 + 20
         sw = max(sw, bx1 - bx0)
-    ex0, ey0 = min(x0, 0) - 50, min(y0, 0) - 60
-    ex1, ey1 = max(x1 + 50, sx + sw + 50 if staged else 0), max(y1 + 80, sy + 20)
+    stage = (x1 + STAGE_GAP - 15, y0, sx + max(sw, STAGE_MIN[0]) + 15, max(sy, y0 + STAGE_MIN[1]))
+    shell, vb = _shell(lab, rid)
+    ex0, ey0, ex1, ey1 = min(x0, 0) - 50, min(y0, 0) - 60, stage[2] + 50, max(y1 + 80, stage[3] + 20)
+    if vb:
+        ex0, ey0, ex1, ey1 = min(ex0, vb[0]), min(ey0, vb[1]), max(ex1, vb[2]), max(ey1, vb[3])
+    return dict(rid=rid, poly=poly, placed=placed, staged=staged, stage=stage, extent=(ex0, ey0, ex1, ey1),
+                shell=shell)
 
-    shell = lab.folder / "rooms" / (room.get("shell") or "")
+
+def _prefixed(el, prefix):
+    """A copy of an SVG subtree with every id (and every #reference to one) prefixed, so rooms can share a file."""
+    el = copy.deepcopy(el)
+    ids = {e.get("id") for e in el.iter() if e.get("id")}
+    ref = re.compile(r"#([\w.:-]+)")
+    for e in el.iter():
+        for k, v in list(e.attrib.items()):
+            if k == "id":
+                e.set(k, prefix + v)
+            elif "#" in v:
+                e.set(k, ref.sub(lambda m: "#" + (prefix if m.group(1) in ids else "") + m.group(1), v))
+    return el
+
+
+def editable(lab, res):
+    """The layout file for Inkscape: every room side by side, each with its "not placed yet" area.
+
+    The room outlines are locked layers; the objects are on one layer per level (floor and benches, under benches,
+    on benches, walls and shelves), each its own top-level group in document coordinates, so any of them can be
+    dragged anywhere: onto another bench, or into another room. pull works out where each one landed.
+    """
+    flagged = _flagged(lab, res)
+    blocks = [_block(lab, rid) for rid in lab.rooms]
+    sizes = {}
+    for b in blocks:
+        sizes.update(label_plan(lab, res, b["rid"], LABEL_MIN["layout"], covered=True))
+    cols = 1 if len(blocks) <= 1 else 2 if len(blocks) <= 4 else 3
+    widths, heights = [0.0] * cols, [0.0] * ((len(blocks) + cols - 1) // cols or 1)
+    for k, b in enumerate(blocks):
+        ex0, ey0, ex1, ey1 = b["extent"]
+        widths[k % cols] = max(widths[k % cols], ex1 - ex0)
+        heights[k // cols] = max(heights[k // cols], ey1 - ey0)
+    rooms_svg, layers = [], {k: [] for k, _ in LAYERS}
+    for k, b in enumerate(blocks):
+        c, row = k % cols, k // cols
+        ox = sum(widths[:c]) + c * ROOM_GAP - b["extent"][0]
+        oy = sum(heights[:row]) + row * ROOM_GAP - b["extent"][1]
+        rid = b["rid"]
+        parts = []
+        if b["shell"] is not None:
+            for child in b["shell"]:
+                tag = child.tag.split("}")[-1]
+                if tag in ("namedview", "title", "metadata") or not isinstance(child.tag, str):
+                    continue
+                el = _prefixed(child, f"{rid}--")
+                if el.get(f"{{{NS_INK}}}groupmode") == "layer":
+                    el.set(f"{{{NS_SOD}}}insensitive", "true")
+                parts.append(ET.tostring(el, encoding="unicode"))
+        else:
+            parts.append(f'<polygon points="{_pts(b["poly"])}" fill="none" stroke="#333" stroke-width="3"/>'
+                         f'<text x="0" y="-30" font-family="sans-serif" font-size="20" font-weight="bold">{esc(rid)}</text>')
+        sx0, sy0, sx1, sy1 = b["stage"]
+        parts.append(f'<rect id="stage-{esc(rid)}" x="{_n(sx0)}" y="{_n(sy0)}" width="{_n(sx1 - sx0)}" '
+                     f'height="{_n(sy1 - sy0)}" fill="#fff7ed" stroke="#e07b00" stroke-width="1" stroke-dasharray="6 4"/>'
+                     f'<text x="{_n(sx0 + 8)}" y="{_n(sy0 + 18)}" font-family="sans-serif" font-size="12" fill="#e07b00">'
+                     f'{esc(rid)}: not placed yet</text>')
+        rooms_svg.append(f'<g xmlns="{NS_SVG}" xmlns:inkscape="{NS_INK}" xmlns:sodipodi="{NS_SOD}" id="room-{esc(rid)}" '
+                         f'inkscape:groupmode="layer" inkscape:label="{esc(rid)} (room, locked)" sodipodi:insensitive="true" '
+                         f'transform="translate({_n(ox)},{_n(oy)})">{"".join(parts)}</g>')
+        for i, m in b["placed"]:
+            ang = round(math.degrees(math.atan2(m[1], m[0]))) % 360
+            layers[layout_layer(lab, res, i)].append(
+                _object(lab, i, (m[4] + ox, m[5] + oy), ang, ang, flagged, sizes=sizes, nest=False))
+        for i, (px, py) in b["staged"]:
+            layers[layout_layer(lab, res, i)].append(
+                _object(lab, i, (px + ox, py + oy), 0, 0, flagged, unplaced=True, nest=False))
+    w = sum(widths) + (cols - 1) * ROOM_GAP
+    h = sum(heights) + (len(heights) - 1) * ROOM_GAP
+    help_y, h = h + 20, h + 90
     root = ET.Element(f"{{{NS_SVG}}}svg")
-    if shell.is_file():
-        src = ET.parse(shell).getroot()
-        vb = [float(n) for n in svg.NUM.findall(src.get("viewBox") or "")]
-        if len(vb) == 4:
-            ex0, ey0, ex1, ey1 = min(ex0, vb[0]), min(ey0, vb[1]), max(ex1, vb[0] + vb[2]), max(ey1, vb[1] + vb[3])
-        for child in src:
-            el = copy.deepcopy(child)
-            if el.get(f"{{{NS_INK}}}groupmode") == "layer":
-                el.set(f"{{{NS_SOD}}}insensitive", "true")
-            root.append(el)
-    else:
-        root.append(ET.fromstring(f'<g xmlns="{NS_SVG}"><polygon points="{_pts(poly)}" fill="none" stroke="#333" '
-                                  f'stroke-width="3"/></g>'))
-    help_y, ey1 = ey1 + 12, ey1 + 70
-    w, h = ex1 - ex0, ey1 - ey0
     root.set("width", f"{_n(w)}cm")
     root.set("height", f"{_n(h)}cm")
-    root.set("viewBox", f"{_n(ex0)} {_n(ey0)} {_n(w)} {_n(h)}")
-    help_lines = ("Click anything and drag it, including onto another bench: pull works out what it stands on now.",
-                  "Moving a bench leaves what's on it behind: drag a box around the bench to take everything along.",
-                  "Rotate in 45° steps (Object › Transform). Hide or lock layers (Layer › Layers and Objects) to reach "
-                  "what's underneath.",
-                  "Save, then: python -m labmap check --layout to try it; python -m labmap pull to keep it.")
-    if staged:
-        layers["floor"].insert(0, f'<text x="{_n(sx)}" y="{_n(y0 + 12)}" font-family="sans-serif" font-size="12" '
-                                  f'fill="#e07b00">Not placed yet: drag into the room</text>')
+    root.set("viewBox", f"0 0 {_n(w)} {_n(h)}")
+    root.append(ET.fromstring(
+        f'<sodipodi:namedview xmlns:sodipodi="{NS_SOD}" xmlns:inkscape="{NS_INK}" id="namedview" pagecolor="#ffffff" '
+        f'bordercolor="#666666" inkscape:document-units="cm" showgrid="false"/>'))
+    for text in rooms_svg:
+        root.append(ET.fromstring(text))
     for key, name in LAYERS:
         root.append(ET.fromstring(
             f'<g xmlns="{NS_SVG}" xmlns:inkscape="{NS_INK}" id="layer-{key}" inkscape:groupmode="layer" '
             f'inkscape:label="{esc(name)}">{"".join(layers[key])}</g>'))
+    help_lines = ("Click anything and drag it: onto another bench, or into another room. pull works out where it "
+                  "landed and what it stands on.",
+                  "To put something from the floor on a bench (or back), move it to that layer: Layer › Move Selection "
+                  "to Layer Above / Below (Shift+Page Up / Page Down), then drag it into place.",
+                  "Moving a bench leaves what's on it behind: drag a box around the bench to take everything along. "
+                  "Drop something in a room's 'not placed yet' area to take it out of the layout.",
+                  "Rotate in 45° steps (Object › Transform). Hide or lock layers (Layer › Layers and Objects) to reach "
+                  "what's underneath.",
+                  "Save, then: python -m labmap check --layout to try it; python -m labmap pull to keep it.")
     root.append(ET.fromstring(
         f'<g xmlns="{NS_SVG}" xmlns:inkscape="{NS_INK}" xmlns:sodipodi="{NS_SOD}" id="layer-help" '
         f'inkscape:groupmode="layer" inkscape:label="help" sodipodi:insensitive="true">' +
-        "".join(f'<text x="{_n(ex0 + 50)}" y="{_n(help_y + 14 * k)}" font-family="sans-serif" font-size="11" '
+        "".join(f'<text x="50" y="{_n(help_y + 16 * k)}" font-family="sans-serif" font-size="13" '
                 f'fill="#595959">{esc(t)}</text>' for k, t in enumerate(help_lines)) + "</g>"))
     return ET.tostring(root, encoding="unicode", xml_declaration=True)
 
 
 # --- reading moves back -----------------------------------------------------------------------------------
 
-def read_matrices(path):
-    """{object id: transform matrix in room centimetres} for every obj-<ID> group in a layout file."""
+def read_layout(path):
+    """({object id: transform in document cm}, {room id: {"m": room frame -> document, "stage": corners}},
+    {object id: the level layer it's on: floor, under, on or wall})."""
     root = ET.parse(path).getroot()
     k = svg.cm_per_unit(root)
-    out = {}
+    scale = (k, 0, 0, k, 0, 0)
+    mats, rooms, layers = {}, {}, {}
+    keys = {f"layer-{key}": key for key, _ in LAYERS}
 
-    def walk(el, m):
+    def walk(el, m, layer=None):
         m = svg.mul(m, svg.parse_transform(el.get("transform")))
-        gid = el.get("id") or ""
-        if el.tag == f"{{{NS_SVG}}}g" and gid.startswith(PREFIX):
-            out.setdefault(gid[len(PREFIX):], svg.mul((k, 0, 0, k, 0, 0), m))
+        gid, tag = el.get("id") or "", el.tag.split("}")[-1]
+        if tag == "g" and gid in keys:
+            layer = keys[gid]
+        if tag == "g" and gid.startswith(PREFIX):
+            mats.setdefault(gid[len(PREFIX):], svg.mul(scale, m))
+            if layer:
+                layers.setdefault(gid[len(PREFIX):], layer)
+        elif tag == "g" and gid.startswith("room-"):
+            rooms.setdefault(gid[5:], {})["m"] = svg.mul(scale, m)
+        elif tag == "rect" and gid.startswith("stage-"):
+            x, y = float(el.get("x") or 0), float(el.get("y") or 0)
+            w, h = float(el.get("width") or 0), float(el.get("height") or 0)
+            rooms.setdefault(gid[6:], {})["stage"] = svg.apply(svg.mul(scale, m), [(x, y), (x + w, y), (x + w, y + h), (x, y + h)])
         for child in el:
-            walk(child, m)
+            walk(child, m, layer)
 
     walk(root, svg.IDENTITY)
-    return out
+    return mats, {rid: r for rid, r in rooms.items() if "m" in r}, layers
 
 
 def _carrier(r):
@@ -702,32 +786,78 @@ def _carrier(r):
     return s == "yes" or (s != "no" and r.get("category") in STACKABLE)
 
 
-def positions(lab, rid, mats):
-    """({id: (x, y, faces)} where the layout differs from lab-data.xlsx, [notes]).
+def no_moves():
+    return {sheet: {} for sheet in MOVE_SHEETS}
 
-    Something mounted on or under another object that now sits over a different one gets
-    (x, y, faces, new parent, new mount) instead: on = the topmost thing it can stand on (a bench, table, shelf,
-    cabinet, cart, or anything with stackable = yes) under its centre; under = something with free_under. Over
-    nothing of the kind, it's standing on the floor now.
+
+def count(moves):
+    return sum(len(v) for v in moves.values())
+
+
+def moves_from(lab, mats, rooms, layers=None):
+    """({"placeables": {id: {column: value}}, "services": ..., "equipment": ...}, [notes]): what the layout says
+    has changed.
+
+    Each object lands in the room (or staging area) under its centre. Something mounted on or under another object
+    gets a new parent if it now sits over a different one: on = the topmost thing it can stand on (a bench, table,
+    shelf, cabinet, cart, or anything with stackable = yes); under = something with free_under. Over nothing of the
+    kind, it's standing on the floor now. What moves to another room takes along what's in it (drawers) and on it
+    (sockets on a bench spine); equipment whose socket stays behind gets its outlet cleared.
+
+    layers: {id: layer} from read_layout. Moving an object to another layer changes its mount: *floor and benches*
+    = standing on the floor, *under benches* = under the bench it's dropped beneath, *on benches* = on whatever it's
+    dropped on. (The *walls and shelves* layer holds things on shelves too, so moving there changes nothing.)
     """
-    P = lab.placeables
-    poly = lab.rooms[rid].get("poly")
-    room_right = G.bbox(poly)[2] if poly else None
-    ids = [i for i, r in P.items() if r.get("room") == rid and r.get("mount") in ("floor", "wall", "on", "under", "part")]
+    P, S, E = lab.placeables, lab.services, lab.equipment
+    frames = {rid: (_inv(r["m"]), _room_poly(lab.rooms[rid])) for rid, r in rooms.items() if rid in lab.rooms}
+    stages = {rid: G.bbox([_apply(frames[rid][0], p) for p in r["stage"]])
+              for rid, r in rooms.items() if rid in frames and r.get("stage")}
+    ids = [i for i, r in P.items() if r.get("mount") in ("floor", "wall", "on", "under", "part") and i in mats]
     ids = [i for i in ids if P[i].get("shape") != "group"] + [i for i in ids if P[i].get("shape") == "group"]
-    feet = {}
+    notes = []
 
     def pinned(j):
         r = P.get(j, {})
         return r.get("fixed") == "yes" or (r.get("mount") == "part" and P.get(r.get("parent"), {}).get("fixed") == "yes")
 
+    def locate(pt):
+        for rid, (inv, poly) in frames.items():
+            if G.inside(_apply(inv, pt), poly):
+                return rid, False
+        for rid, (x0, y0, x1, y1) in stages.items():
+            px, py = _apply(frames[rid][0], pt)
+            if x0 <= px <= x1 and y0 <= py <= y1:
+                return rid, True
+        return None, None
+
+    land, ignored = {}, set()  # id -> (room, in its staging area); dropped outside everything: left as it was
+    for i in ids:
+        r = P[i]
+        if r.get("mount") == "part":
+            continue
+        pts = outline(lab, i)
+        if not pts:
+            continue
+        rid, staged = locate(_apply(mats[i], G.centroid(pts)))
+        if rid is None and not pinned(i):
+            notes.append(f"{i} is outside every room and 'not placed yet' area, so it was left as it was")
+            ignored.add(i)
+        land[i] = (r.get("room"), r.get("x") is None) if rid is None or pinned(i) else (rid, staged)
+    for i in ids:
+        if P[i].get("mount") == "part":
+            land[i] = land.get(P[i].get("parent"))
+            if P[i].get("parent") in ignored:
+                ignored.add(i)
+    rm = {i: svg.mul(frames[land[i][0]][0], mats[i]) for i in ids if land.get(i) and land[i][0] in frames}
+    feet = {}
+
     def frame(j):
-        """Where j really is: as drawn, except that a fixed object stays where the spreadsheet has it."""
-        if pinned(j):
+        """Where j is in its room: as drawn, except that a fixed object stays where the spreadsheet has it."""
+        if pinned(j) or j in ignored:
             m = abs_matrix(lab, j)
             if m is not None:
                 return m
-        return mats.get(j)
+        return rm.get(j)
 
     def footprint(j):
         if j not in feet:
@@ -744,41 +874,51 @@ def positions(lab, rid, mats):
                     todo.append(c)
         return out
 
-    def host(i, mount, centre):
+    def host(i, mount, rid, centre):
         mine = below(i) | {i}
         ok = (lambda r: _carrier(r)) if mount == "on" else (lambda r: r.get("free_under") is not None)
-        cands = [j for j, r in P.items() if r.get("room") == rid and j not in mine and ok(r)
+        cands = [j for j, r in P.items() if land.get(j) == (rid, False) and j not in mine and ok(r)
                  and r.get("mount") in ("floor", "wall", "on", "part") and footprint(j) and G.inside(centre, footprint(j))]
         if P[i].get("parent") in cands:
             return P[i]["parent"]
         return max(cands, key=lambda j: (_depth(lab, j), -abs(G.area(footprint(j))))) if cands else None
 
-    new, notes = {}, []
+    new = {}
     for i in ids:
         r = P[i]
-        placed = r.get("x") is not None and r.get("y") is not None
-        parent, mount = r.get("parent"), r.get("mount")
-        if i not in mats:
-            if placed and (not parent or parent in mats):
-                notes.append(f"{i} isn't in the layout (deleted or ungrouped?), so it was left as it is")
+        if not land.get(i) or i not in rm or i in ignored:
             continue
-        m = mats[i]
-        pts = outline(lab, i, {k: v[:3] for k, v in new.items() if v[0] is not None})
+        rid, staged = land[i]
+        parent, mount = r.get("parent"), r.get("mount")
+        target = LAYER_MOUNT.get((layers or {}).get(i))
+        if target and target != mount and mount in ("floor", "wall", "on", "under") and r.get("shape") != "group":
+            names = dict(LAYERS)
+            notes.append(f"{i} was moved to the '{names[layers[i]]}' layer, so it's mounted '{target}' now"
+                         + ("" if target == "floor" else f": {target} whatever it's dropped on"))
+            parent, mount = None, target
+        if staged:  # waiting to be placed; in another room's area, it can't keep a parent in the old room
+            if rid != r.get("room") and mount != "part":
+                parent = None if parent and P.get(parent, {}).get("room") != rid else parent
+                mount = "floor" if not parent and mount in ("wall", "part") else mount
+            new[i] = dict(x=None, y=None, faces=r.get("faces") or "S", parent=parent, mount=mount, room=rid)
+            continue
+        m = rm[i]
+        pts = outline(lab, i, {k: (v["x"], v["y"], v["faces"]) for k, v in new.items() if v["x"] is not None})
         if not pts:
             continue
-        cu, cv = G.centroid(pts)
-        cx, cy = _apply(m, (cu, cv))
-        staged = mount != "part" and room_right is not None and cx > room_right + STAGE_GAP / 2
-        if mount in ("on", "under") and not staged:
-            h = host(i, mount, (cx, cy))
+        centre = _apply(m, G.centroid(pts))
+        if mount in ("on", "under"):
+            h = host(i, mount, rid, centre)
             if h is None:
                 notes.append(f"{i} isn't {mount} anything any more, so it's standing on the floor now")
                 parent, mount = None, "floor"
             else:
                 parent = h
-        if parent and parent not in mats:
-            continue
-        base = mats[parent] if mount == "part" else frame(parent)
+        base = None
+        if parent:
+            base = svg.mul(frames[rid][0], mats[parent]) if mount == "part" and parent in mats else frame(parent)
+            if base is None:
+                continue
         a, b, c, d, e, f = svg.mul(_inv(base), m) if parent else m
         ang = math.degrees(math.atan2(b, a)) % 360
         snap = int(round(ang / 45) * 45) % 360
@@ -787,69 +927,102 @@ def positions(lab, rid, mats):
         if abs(math.hypot(a, b) - 1) > 0.01:
             notes.append(f"{i} was resized in Inkscape: sizes come from the spreadsheet, so that was ignored")
         rp = [G.rot(snap, u, v) for u, v in pts]
-        x, y = (None, None) if staged else (e + min(p[0] for p in rp), f + min(p[1] for p in rp))
-        new[i] = (None if x is None else round(x), None if y is None else round(y), FACES[snap], parent, mount)
-    updates = {}
-    for i, (x, y, faces, parent, mount) in new.items():
+        x, y = round(e + min(p[0] for p in rp)), round(f + min(p[1] for p in rp))
+        new[i] = dict(x=x, y=y, faces=FACES[snap], parent=parent, mount=mount, room=rid)
+
+    moves = no_moves()
+    for i, v in new.items():
         r = P[i]
-        if faces == "S" and not r.get("faces"):
-            faces = None
-        if x is None:
+        faces = None if v["faces"] == "S" and not r.get("faces") else v["faces"]
+        if v["x"] is None:
             faces = r.get("faces")
-        same_xy = (x is None and r.get("x") is None) or (x is not None and r.get("x") is not None
-                                                         and abs(x - r["x"]) < 0.6 and abs(y - r["y"]) < 0.6)
-        same_host = (parent, mount) == (r.get("parent"), r.get("mount"))
-        if same_xy and same_host and (faces or "S") == (r.get("faces") or "S"):
+        same_xy = (v["x"] is None and r.get("x") is None) or (v["x"] is not None and r.get("x") is not None
+                                                             and abs(v["x"] - r["x"]) < 0.6 and abs(v["y"] - r["y"]) < 0.6)
+        change = {k: v[k] for k in ("parent", "mount", "room") if v[k] != r.get(k)}
+        if same_xy and not change and (faces or "S") == (r.get("faces") or "S"):
             continue
         if r.get("fixed") == "yes":
             notes.append(f"{i} is fixed = yes, so its move in the layout was ignored")
             continue
-        updates[i] = (x, y, faces) if same_host else (x, y, faces, parent, mount)
-    return updates, notes
+        moves["placeables"][i] = dict(x=v["x"], y=v["y"], faces=faces, **change)
+
+    def room_now(i):
+        """The room i ends up in: its own move; else, if it isn't drawn itself (a drawer), its nearest ancestor's."""
+        j, seen = i, set()
+        while j in P and j not in seen:
+            seen.add(j)
+            if "room" in moves["placeables"].get(j, {}):
+                return moves["placeables"][j]["room"]
+            if j in mats:
+                return P[j].get("room")
+            j = P[j].get("parent")
+        return P[i].get("room")
+
+    for i, r in P.items():
+        if i not in moves["placeables"] and r.get("parent") and room_now(i) != r.get("room"):
+            moves["placeables"][i] = dict(room=room_now(i))
+    for sid, s in S.items():
+        if s.get("parent") in P and room_now(s["parent"]) != s.get("room"):
+            moves["services"][sid] = dict(room=room_now(s["parent"]))
+    for eid, e in E.items():
+        out = e.get("outlet")
+        if eid in P and out in S:
+            where = moves["services"].get(out, {}).get("room", S[out].get("room"))
+            if room_now(eid) != where:
+                moves["equipment"][eid] = dict(outlet=None)
+                notes.append(f"{eid} moves to {room_now(eid)} but its outlet {out} is in {where}: outlet cleared "
+                             f"(the nearest socket is assumed until you fill it in)")
+    return moves, notes
 
 
 def layout_moves(lab):
-    """All moves in all of a lab's layout files: ({id: update}, [notes]) as positions() gives them."""
-    updates, notes = {}, []
-    for rid in lab.rooms:
-        path = layout_path(lab.folder, rid)
-        if path.exists():
-            up, nt = positions(lab, rid, read_matrices(path))
-            updates.update(up)
-            notes += [f"{rid}: {n}" for n in nt]
-    return updates, notes
+    """What the layout file says has changed: (moves, notes) as moves_from() gives them."""
+    path = layout_path(lab.folder)
+    if not path.exists():
+        return no_moves(), []
+    mats, rooms, layers = read_layout(path)
+    return moves_from(lab, mats, rooms, layers)
 
 
-def describe_move(r, update):
-    """'on BENCH-04.B at 10, 0 S  ->  on BENCH-02 at 30, 5 S' for printing a pull."""
-    def where(parent, mount, x, y, faces):
-        spot = "not placed" if x is None else f"{x}, {y} {faces or 'S'}"
-        return f"{mount} {parent} at {spot}" if parent else spot
-    x, y, faces, *host = update
-    parent, mount = host if host else (r.get("parent"), r.get("mount"))
-    return (f"{where(r.get('parent'), r.get('mount'), r.get('x'), r.get('y'), r.get('faces'))}  ->  "
-            f"{where(parent, mount if parent else 'floor', x, y, faces)}" + ("  (now standing on the floor)" if host and not parent else ""))
+def describe_move(lab, sheet, i, change):
+    """'SPEC-02: LAB-A, on BENCH-04.B at 10, 5  ->  LAB-B, on BENCH-14.A at 30, 5 E' for printing a pull."""
+    if sheet == "services":
+        return f"{i} (socket/tap): moves with {lab.services[i].get('parent')} to {change['room']}"
+    if sheet == "equipment":
+        return f"outlet {lab.equipment[i].get('outlet')} cleared (it stays in the old room)"
+    r = lab.placeables[i]
+
+    def where(room, parent, mount, x, y, faces):
+        spot = "not placed" if x is None else f"{x}, {y}" + (f" {faces}" if faces and faces != "S" else "")
+        return f"{room}, " + (f"{mount} {parent} at {spot}" if parent else spot)
+
+    if set(change) == {"room"}:
+        return f"{r.get('room')}  ->  {change['room']} (with {r.get('parent')})"
+    after = {**r, **change}
+    return (f"{where(r.get('room'), r.get('parent'), r.get('mount'), r.get('x'), r.get('y'), r.get('faces'))}  ->  "
+            f"{where(after.get('room'), after.get('parent'), after.get('mount'), after.get('x'), after.get('y'), after.get('faces'))}"
+            + ("  (now standing on the floor)" if change.get("mount") == "floor" and r.get("mount") != "floor" else ""))
 
 
-def layout_path(folder, rid):
-    return Path(folder) / "build" / "layout" / f"{rid}.svg"
+def layout_path(folder):
+    return Path(folder) / "build" / "layout" / LAYOUT_FILE
 
 
 def write_layouts(lab, res, force=False):
-    """Write build/layout/<room>.svg for every room. A file with moves not yet pulled is left alone unless force."""
-    out = []
-    for rid in lab.rooms:
-        path = layout_path(lab.folder, rid)
-        if path.exists() and not force:
-            try:
-                pending, _ = positions(lab, rid, read_matrices(path))
-            except ET.ParseError:
-                pending = {}
-            if pending:
-                names = ", ".join(sorted(pending)[:6]) + (" ..." if len(pending) > 6 else "")
-                out.append((rid, path, f"kept: it has moves not pulled into lab-data.xlsx yet ({names})"))
-                continue
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(editable(lab, res, rid), encoding="utf-8")
-        out.append((rid, path, "written"))
-    return out
+    """Write build/layout/labs.svg with every room. Left alone if it has moves not pulled yet, unless force.
+    Returns (path, status)."""
+    path = layout_path(lab.folder)
+    if path.exists() and not force:
+        try:
+            pending, _ = layout_moves(lab)
+        except (ET.ParseError, KeyError):
+            pending = no_moves()
+        if count(pending):
+            names = sorted({i for v in pending.values() for i in v})
+            return path, f"kept: it has moves not pulled into lab-data.xlsx yet ({', '.join(names[:6])}" + \
+                         (" ..." if len(names) > 6 else "") + ")"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(editable(lab, res), encoding="utf-8")
+    for rid in lab.rooms:  # one file per room, from before the combined layout: out of date now
+        (path.parent / f"{rid}.svg").unlink(missing_ok=True)
+    return path, "written"

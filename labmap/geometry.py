@@ -155,9 +155,20 @@ def contains(outer, poly):
 
 # --- placement --------------------------------------------------------------------------------------------
 
-def clear_boxes(r, w, d):
-    """Clearance rectangles in the object's own frame: {side: (u0, v0, u1, v1)}."""
+DOOR_GAP = 10  # cm beside a door's hinge; the settings sheet's door_gap overrides it in the checks
+
+
+def clear_boxes(r, w, d, door_gap=DOOR_GAP):
+    """Clearance rectangles in the object's own frame: {side: (u0, v0, u1, v1)}.
+
+    A door (door column: hinged left, right or both, as you face it) widens them: its swing in front (the door's
+    width, half each for double doors) and door_gap beside the hinge, so it opens past 90 degrees."""
     c = {k: r.get(f"clear_{k}") or 0 for k in ("front", "back", "left", "right")}
+    door = r.get("door")
+    if door in ("left", "right", "both"):
+        c["front"] = max(c["front"], w / 2 if door == "both" else w)
+        for side in ("left", "right") if door == "both" else (door,):
+            c[side] = max(c[side], door_gap)
     boxes = {"front": (0, d, w, d + c["front"]), "back": (0, -c["back"], w, 0),
              "left": (-c["left"], 0, 0, d), "right": (w, 0, w + c["right"], d)}
     return {k: b for k, b in boxes.items() if c[k] > 0}
@@ -275,6 +286,26 @@ def place_all(lab):
         place(i)
     unique = list({(f.message, f.ids): f for f in issues}.values())
     return geo, unique
+
+
+def poly_distance(p, q):
+    """Shortest distance between two polygons on the plan, 0 if they touch or overlap."""
+    if sat_any(p, q):
+        return 0.0
+
+    def seg(pt, a, b):
+        (px, py), (ax, ay), (bx, by) = pt, a, b
+        dx, dy = bx - ax, by - ay
+        t = 0.0 if dx == dy == 0 else max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)))
+        return math.hypot(px - ax - t * dx, py - ay - t * dy)
+
+    return min(min(seg(pt, a, b) for pt in p for a, b in zip(q, q[1:] + q[:1])),
+               min(seg(pt, a, b) for pt in q for a, b in zip(p, p[1:] + p[:1])))
+
+
+def sat_any(p, q):
+    """True if two polygons overlap or touch (either may be concave)."""
+    return any(sat(a, b) for a in convex_pieces(p) for b in convex_pieces(q)) or inside(p[0], q) or inside(q[0], p)
 
 
 def position(lab, geo, i):

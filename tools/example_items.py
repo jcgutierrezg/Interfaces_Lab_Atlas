@@ -1,0 +1,105 @@
+"""Items: the long tail that lives in drawers, shelves and boxes."""
+
+_ROWS = [
+    # name | synonyms | container | qty | category | notes
+    ("Hex key set 1.5-10 mm", "allen key; hex wrench; inbus", "PED-01.D2", 1, "tool", None),
+    ("Screwdriver set", "screwdrivers; phillips; flathead; slotted", "PED-01.D2", 1, "tool", None),
+    ("Parafilm", "sealing film; lab film; wax film", "PED-01.D1", "3 rolls", "consumable", None),
+    ("Spare fuses, 10 A", "fuse; fuses", "BENCH-02.D1", 5, "spare-part", "for CEN-01, see its SOP"),
+    ("USB A-B cables, 3 m", "printer cable; usb-b", "BOX-01", 4, "cable", None),
+    ("Centrifuge adaptors for 15 mL tubes", "adapters; inserts; falcon adaptors", "CAB-01.S2", 4, "spare-part", None),
+    ("Nitrile gloves, size M", "gloves", "CAB-01.S1", "10 boxes", "consumable", None),
+    ("Instrument manuals", "manual; binders; documentation", "CAB-01.S1", None, "documentation", None),
+    ("Pipette tips 200 µL", "tips; yellow tips", "PED-01.D1", "5 racks", "consumable", None),
+    ("Pipette tips 1000 µL", "tips; blue tips", "PED-01.D1", "5 racks", "consumable", None),
+    ("Weighing boats", "weigh boats; weighing dishes", "BENCH-02.D2", "1 box", "consumable", None),
+    ("Spatulas", "spatula; scoop", "BENCH-02.D2", 6, "tool", None),
+    ("Balance calibration weights", "calibration weight; test weights; check weights", "BENCH-02.D1", "1 set",
+     "tool", "for BAL-01"),
+    ("pH buffer solutions 4 / 7 / 10", "ph buffers; calibration buffers", "CAB-01.S2", "3 bottles", "consumable",
+     "for PH-01"),
+    ("Magnetic stir bars", "stirrer bars; flea; stir fleas", "PED-01.D3", "~30", "consumable", None),
+    ("Stir bar retriever", "magnet wand; flea catcher", "PED-01.D3", 1, "tool", None),
+    ("Autoclave tape", "indicator tape; sterilisation tape", "PED-01.D1", "4 rolls", "consumable", "for AUTO-01"),
+    ("Heat-resistant gloves", "oven gloves; autoclave gloves; thermal gloves", "CAB-01.S1", "2 pairs", "tool", None),
+    ("Microscope slides", "slides; glass slides", "CAB-01.S2", "2 boxes", "consumable", None),
+    ("Cover slips", "coverslips; cover glass", "CAB-01.S2", "3 boxes", "consumable", None),
+    ("Lens paper", "lens tissue", "PED-01.D3", "2 packs", "consumable", "for MIC-01"),
+    ("Cable ties", "zip ties; tie wraps", "BOX-01", "1 bag", "consumable", None),
+    ("Electrical tape", "insulating tape; pvc tape", "BOX-01", 2, "consumable", None),
+    ("Multimeter", "voltmeter; dmm", "BOX-01", 1, "tool", None),
+    ("Vacuum pump oil", "pump oil", "BENCH-02.D2", "1 L", "spare-part", "for PUMP-01"),
+    ("HPLC vials 2 mL", "autosampler vials; vials", "PED-02.D1", "3 boxes", "consumable", None),
+    ("Vial caps with septa", "caps; septa; screw caps", "PED-02.D1", "2 boxes", "consumable", None),
+    ("Syringe filters 0.22 µm", "filters; syringe filter; ptfe filters", "PED-02.D2", "1 box", "consumable", None),
+    ("Disposable syringes 5 mL", "syringes", "PED-02.D2", "1 box", "consumable", None),
+    ("HPLC column C18 (spare)", "column; c18; lc column", "CAB-02.S1", 2, "spare-part", "for HPLC-01"),
+    ("Guard cartridges", "guard column; precolumn", "CAB-02.S1", 5, "spare-part", "for HPLC-01"),
+    ("Mobile phase bottles 1 L", "solvent bottles; reservoirs", "CAB-02.S2", 6, "glassware", None),
+    ("Solvent inlet filters", "frits; sinker frits", "BOX-02", 4, "spare-part", None),
+    ("PEEK tubing and fittings", "fittings; ferrules; peek", "BOX-02", "1 bag", "spare-part", None),
+    ("GC septa", "septum; inlet septa", "BOX-04", 50, "consumable", "for GC-01"),
+    ("GC inlet liners", "liner; liners", "BOX-04", 10, "spare-part", "for GC-01"),
+    ("GC column (spare)", "capillary column", "CAB-02.S3", 1, "spare-part", "for GC-01"),
+    ("Graphite ferrules", "ferrule; ferrules", "BOX-04", 20, "spare-part", None),
+    ("Gas leak detector", "leak detector; leak checker", "PED-03.D1", 1, "tool", None),
+    ("Tweezers", "forceps", "PED-03.D1", 3, "tool", None),
+    ("ATR cleaning wipes", "lens wipes; kimwipes; tissues", "PED-03.D2", "2 boxes", "consumable", "for FTIR-01"),
+    ("Calibration standards kit", "standards; reference standards", "BOX-03", 1, "consumable", None),
+    ("Microcentrifuge tubes 1.5 mL", "eppendorf tubes; eppis; microtubes", "PED-03.D2", "2 bags", "consumable", None),
+    ("Tube racks", "racks; eppendorf racks", "PED-03.D3", 6, "tool", None),
+    ("Label printer tape", "labels; label cassette", "PED-02.D3", 3, "consumable", "for LABEL-01"),
+    ("Printer paper", "paper; a4", "CAB-02.S3", "2 reams", "consumable", None),
+    ("Spare network cables", "ethernet cable; patch cable; lan cable", "PED-02.D3", 5, "cable", None),
+    ("USB drives", "usb stick; memory stick; flash drive", "PED-03.D1", 3, "other", None),
+    ("Wrench set", "spanners; open-end wrench", "PED-02.D3", 1, "tool", None),
+    ("Nitrogen generator filters (spare)", "n2 filter; generator filter", "CAB-02.S3", 2, "spare-part",
+     "for N2G-01"),
+]
+
+from datetime import date
+
+DOCUMENTS = [
+    dict(id="COSHH-014", type="coshh", title="Immersion oil and lens-cleaning solvents", applies_to="MIC-01",
+         status="approved", filled=date(2026, 3, 2), expires=date(2029, 3, 2), approved_by="Safety officer",
+         link="https://intranet.example.org/coshh/COSHH-014.pdf", notes="EXAMPLE"),
+    dict(id="RA-003", type="risk-assessment", title="Benchtop autoclave operation", applies_to="AUTO-01",
+         status="approved", filled=date(2025, 11, 10), expires=date(2028, 11, 10), approved_by="Safety officer",
+         link="S:/Safety/RA-003.pdf", notes="EXAMPLE"),
+    dict(id="CAL-021", type="calibration", title="Balance calibration certificate", applies_to="BAL-01; BAL-02",
+         status="approved", filled=date(2026, 6, 1), expires=date(2029, 6, 1), link="S:/Calibration/CAL-021.pdf",
+         notes="EXAMPLE"),
+    dict(id="PAT-2026-A", type="electrical-test", title="PAT tests, wet lab", applies_to="LAB-A", status="approved",
+         filled=date(2026, 1, 15), expires=date(2029, 1, 15), notes="EXAMPLE"),
+    dict(id="COSHH-022", type="coshh", title="LC-MS mobile phase solvents", applies_to="HPLC-01; MS-01",
+         status="pending", filled=date(2026, 9, 1), notes="EXAMPLE WARNING: not approved yet"),
+]
+
+# Ordering details and spare-part tracking, by item name. notes=None clears a "for X" note that spare_for replaces.
+_MORE = {
+    "Spare fuses, 10 A": dict(spare_for="CEN-01", min_qty=2, rs_part="000-0101", notes="EXAMPLE part number"),
+    "Centrifuge adaptors for 15 mL tubes": dict(spare_for="CEN-01", min_qty=2),
+    "Vacuum pump oil": dict(spare_for="PUMP-01", min_qty=1, rs_part="000-0102", notes="EXAMPLE part number"),
+    "HPLC column C18 (spare)": dict(spare_for="HPLC-01", min_qty=1, notes=None,
+                                   buy_link="https://www.example.com/columns/c18-150"),
+    "Guard cartridges": dict(qty=2, spare_for="HPLC-01", min_qty=4,
+                             notes="EXAMPLE WARNING: 2 left, keep at least 4"),
+    "Solvent inlet filters": dict(spare_for="HPLC-01"),
+    "PEEK tubing and fittings": dict(spare_for="HPLC-01; MS-01"),
+    "GC inlet liners": dict(qty=0, spare_for="GC-01", min_qty=5, rs_part="000-0103",
+                            notes="EXAMPLE WARNING: none left"),
+    "GC column (spare)": dict(spare_for="GC-01", min_qty=1, notes=None),
+    "Graphite ferrules": dict(spare_for="GC-01", min_qty=10),
+    "Nitrogen generator filters (spare)": dict(container=None, elsewhere="Main stores, building 2, cage 3",
+                                               spare_for="N2G-01", min_qty=1, notes="kept outside the lab",
+                                               buy_link="https://www.example.com/n2-generator/filter-kit"),
+    "Multimeter": dict(rs_part="000-0104", notes="EXAMPLE part number"),
+    "Cable ties": dict(rs_part="000-0105", notes="EXAMPLE part number"),
+    "Nitrile gloves, size M": dict(buy_link="https://www.example.com/gloves/nitrile-m"),
+}
+ITEMS = []
+for n, (name, syn, cont, qty, cat, notes) in enumerate(_ROWS, 1):
+    row = dict(id=f"I-{n:04d}", name=name, synonyms=syn, container=cont, qty=qty, category=cat, notes=notes)
+    row.update(_MORE.get(name, {}))
+    ITEMS.append(row)
+assert len(ITEMS) == len({r["name"] for r in ITEMS}) and set(_MORE) <= {r["name"] for r in ITEMS}

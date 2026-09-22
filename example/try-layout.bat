@@ -1,5 +1,5 @@
 @echo off
-rem Checks the example's arrangement as drawn in its Inkscape layouts, without writing anything.
+rem Checks the example's arrangement as drawn in its Inkscape layout, compares it and lists the moves. Writes nothing.
 rem Works on the worked EXAMPLE in this folder, not your own data. reset.bat puts it back as it came.
 cd /d "%~dp0.."
 python -m labmap check example --layout --open

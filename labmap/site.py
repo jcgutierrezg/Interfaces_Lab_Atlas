@@ -15,6 +15,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from . import checks, layout, md, report
+from . import geometry as G
 from .model import order_links
 
 PHOTO_EXT = {".jpg", ".jpeg", ".png", ".webp"}
@@ -40,7 +41,22 @@ table { border-collapse: collapse; width: 100%; font-size: 14px; margin: 6px 0 1
 th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
 th { background: var(--soft); font-weight: 600; }
 table.facts th { width: 190px; background: none; color: var(--muted); font-weight: 500; }
-tr:target { background: var(--hi); }
+tr:target { background: var(--hi); animation: rowflash .8s ease-in-out 4 alternate; }
+@keyframes rowflash { from { background: var(--hi); } to { background: #ffd84d; } }
+.jump { display: inline-block; margin-left: 10px; padding: 1px 10px; border-radius: 999px; background: #e11d48;
+        color: #fff; font-weight: 600; font-size: 13px; text-decoration: none; }
+.jump:hover { background: #be123c; }
+.pin { pointer-events: none; }
+.pin .ring { fill: none; stroke: #e11d48; stroke-width: 5; transform-box: fill-box; transform-origin: center;
+             animation: pinring 1.6s ease-out infinite; }
+.pin .dot { fill: #e11d48; stroke: #fff; stroke-width: 3; }
+.pin .arrow { fill: #e11d48; stroke: #fff; stroke-width: 3; paint-order: stroke; animation: pinbob .9s ease-in-out infinite alternate; }
+.pin .tag rect { fill: #e11d48; stroke: #fff; stroke-width: 2; }
+.pin .tag text { fill: #fff; font-family: system-ui, sans-serif; font-weight: 700; }
+@keyframes pinring { from { transform: scale(.3); opacity: 1; } to { transform: scale(1.7); opacity: 0; } }
+@keyframes pinbob { from { transform: translateY(0); } to { transform: translateY(var(--bob, -8px)); } }
+@keyframes markflash { from { fill: #ffd84d; } to { fill: #ff8a3d; } }
+@media (prefers-reduced-motion: reduce) { .pin .ring, .pin .arrow, tr:target, .map .fp { animation: none !important; } }
 .scroll { overflow-x: auto; }
 .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 0 28px; }
 img.ref { max-width: 100%; border-radius: 6px; border: 1px solid var(--line); }
@@ -206,19 +222,46 @@ class Site:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(text, encoding="utf-8")
 
-    def map(self, rid, mark=None, view=None, svc=None):
+    def pin(self, rid, x, y, text):
+        """A 'you are here' marker drawn above everything on the map: a pulsing ring, a bobbing arrow and a label.
+        Sized to the room; the arrow comes from below instead when there's no room above."""
+        x0, y0, x1, y1 = G.bbox(self.lab.rooms[rid]["poly"])
+        r = max(12.0, max(x1 - x0, y1 - y0) / 32)
+        fs = r * 0.95
+        tw = layout.CHAR_W * fs * len(text) + fs * 1.2
+        up = y - r * 5.2 > y0 - 10  # room for the arrow and label above the spot
+        s = -1 if up else 1
+        arrow = (f"M {-r * .45:.1f},{s * r * 3.1:.1f} H {r * .45:.1f} V {s * r * 2.0:.1f} H {r:.1f} L 0,{s * r * .95:.1f} "
+                 f"L {-r:.1f},{s * r * 2.0:.1f} H {-r * .45:.1f} Z")
+        ty = -r * 3.2 - fs * 1.5 if up else r * 3.2  # the label's top edge, just beyond the arrow's tail
+        return (f'<g class="pin" transform="translate({x:.1f} {y:.1f})" style="--bob: {s * r * .5:.1f}px">'
+                f'<circle class="ring" r="{r * 1.6:.1f}"/><circle class="dot" r="{r * .45:.1f}"/>'
+                f'<path class="arrow" d="{arrow}"/>'
+                f'<g class="tag"><rect x="{-tw / 2:.1f}" y="{ty:.1f}" width="{tw:.1f}" height="{fs * 1.5:.1f}" rx="{fs * .4:.1f}"/>'
+                f'<text x="0" y="{ty + fs * 1.08:.1f}" font-size="{fs:.1f}" text-anchor="middle">{esc(text)}</text></g></g>')
+
+    def map(self, rid, mark=None, view=None, svc=None, label=None):
         room = self.lab.rooms.get(rid) or {}
         if not room.get("poly"):
             return "", ""
-        style = (f"<style>.map [id='obj-{esc(mark)}'] > .fp {{ stroke: #1f4e79; stroke-width: 5; fill: #ffd84d; fill-opacity: 1; }}</style>"
-                 if mark else "")
+        style = (f"<style>.map [id='obj-{esc(mark)}'] > .fp {{ stroke: #e11d48; stroke-width: 6; stroke-dasharray: none; fill: #ffd84d; fill-opacity: 1; "
+                 f"animation: markflash .9s ease-in-out infinite alternate; }}</style>" if mark else "")
         if svc:
             style += (f"<style>.map [id='svc-{esc(svc)}'] > .mk {{ stroke: #1f4e79; stroke-width: 5; }}"
                       f".map .plug[data-s='{esc(svc)}'] {{ opacity: 1; stroke: #1f4e79; stroke-width: 3; }}</style>")
         attr = (f" data-view='{view}'" if view else "") + (" data-svc='on'" if svc else "")
         if rid not in self.drawings:  # the same for every page in the room: draw it once
             self.drawings[rid] = layout.drawing(self.lab, self.res, rid, flag=False)
-        return f"<div class='map'{attr}>{self.drawings[rid]}</div>", style
+        drawing = self.drawings[rid]
+        spot = None
+        if svc:
+            spot = G.service_position(self.lab, self.res.geo, self.S[svc])
+        elif mark and self.res.geo.get(mark) and self.res.geo[mark].poly:
+            spot = G.centroid(self.res.geo[mark].poly)
+        if spot:
+            cut = drawing.rindex("</svg>")
+            drawing = drawing[:cut] + self.pin(rid, spot[0], spot[1], label or svc or mark) + drawing[cut:]
+        return f"<div class='map' id='where-map'{attr}>{drawing}</div>", style
 
     def placed_ancestor(self, i):
         j, seen = i, set()
@@ -341,12 +384,14 @@ class Site:
 
     def object_page(self, i):
         r, e, root = self.P[i], self.E.get(i), "../"
+        jump = (" <a class='jump' href='#where'>&#128205; Show on map</a>"
+                if (self.lab.rooms.get(r.get("room")) or {}).get("poly") and self.placed_ancestor(i) else "")
         pics = self.photos.get(i, [])
         main = next((p for p in pics if not p[2]), None)
         hero = (f"<a href='{root}{main[0]}'><img class='hero' src='{root}{main[0]}' alt='Photo of {esc(i)}'></a>"
                 if main else "")
         body = [f"<div class='top'><div><h1>{esc(i)} <span class='sub'>{esc(r.get('name'))}</span></h1>"
-                f"<p class='where'>{self.crumbs(i, root)}</p></div>{hero}</div>"]
+                f"<p class='where'>{self.crumbs(i, root)}{jump}</p></div>{hero}</div>"]
         body += [f"<h2>How it should look</h2><a href='{root}{p[0]}'><img class='ref' src='{root}{p[0]}' "
                  f"alt='How {esc(i)} should look'></a>" for p in pics if p[2]]
         rest = [p for p in pics if not p[2] and p is not main]
@@ -364,6 +409,9 @@ class Site:
                          ("On wheels", "yes" if r.get("mobile") == "yes" else None),
                          ("Full", f"{r['fill']}%" if r.get("fill") is not None else None),
                          ("Contents checked", esc(r.get("checked"))), ("Procedures", self.sop_links(i, root)),
+                         ("Door", {"left": "hinged on the left", "right": "hinged on the right",
+                                   "both": "double doors"}.get(r.get("door"))),
+                         ("Tags", esc(", ".join(r.get("tags") or [])) or None),
                          ("Notes", esc(r.get("notes")))])
         cols = [f"<div><h2>Details</h2>{details}</div>"]
         if e:
@@ -385,7 +433,10 @@ class Site:
                 ("Used", esc(" ".join(x for x in (e.get("usage"), f"({e['usage_source']})" if e.get("usage_source") else "") if x))),
                 ("Workflow", esc(e.get("workflow"))), ("Power", power),
                 ("Must never lose power", "yes" if e.get("critical") == "yes" else None),
-                ("Plugged into", plug), ("Manual", manual), ("Notes", esc(e.get("notes")))]) + "</div>")
+                ("Plugged into", plug),
+                ("Weight", f"{e['weight']} kg" if e.get("weight") else None),
+                ("Also needs", esc(", ".join(f"{k} ({m})" if m else k for k, m in e.get("needs") or [])) or None),
+                ("Manual", manual), ("Notes", esc(e.get("notes")))]) + "</div>")
         body.append(f"<div class='cols'>{''.join(cols)}</div>")
         kids = self.lab.children.get(i, [])
         for title, mnt in (("Parts", "part"), ("On it", "on"), ("Under it", "under"), ("Inside", "in")):
@@ -408,21 +459,23 @@ class Site:
                 for link, other, _ in self.links_of[i]) + "</ul>")
         body.append(self.docs(i, root))
         anchor = self.placed_ancestor(i)
-        svg_, style = self.map(r.get("room"), anchor, layout.level_of(self.lab, self.res, i))
+        svg_, style = self.map(r.get("room"), anchor, layout.level_of(self.lab, self.res, i), label=i)
         if svg_:
             where = "" if anchor == i else f" <span class='note'>(shown: {self.a(anchor, root)})</span>" if anchor else \
                 " <span class='note'>(not placed yet)</span>"
-            body.append(f"<h2>Where</h2><p class='where'>{self.crumbs(i, root)}{where}</p>{svg_}")
+            body.append(f"<h2 id='where'>Where</h2><p class='where'>{self.crumbs(i, root)}{where}</p>{svg_}")
         self.page(f"o/{fname(i)}.html", f"{i} {r.get('name') or ''}", "".join(body), root, style)
 
     def service_page(self, i):
         s, root = self.S[i], "../"
         users = [e for e, t in self.res.assign.items() if t == i] + [k for k, t in self.S.items() if t.get("fed_by") == i]
+        jump = " <a class='jump' href='#where'>&#128205; Show on map</a>" if (self.lab.rooms.get(s.get("room")) or {}).get("poly") else ""
         body = [f"<h1>{esc(i)} <span class='sub'>{esc(s.get('type'))}</span></h1><p class='where'>{self.crumbs(i, root)}"
-                + (f" › on {self.a(s['parent'], root)}" if s.get("parent") else "") + "</p>",
+                + (f" › on {self.a(s['parent'], root)}" if s.get("parent") else "") + f"{jump}</p>",
                 facts([("Circuit", esc(self.res.circuit_of.get(i))), ("Plugged into", self.a(s["fed_by"], root) if s.get("fed_by") else None),
                        ("Sockets", f"{self.res.used.get(i, 0)} of {s['sockets']} in use" if s.get("sockets") is not None else None),
                        ("Socket type", esc(s.get("socket_type"))), ("Supplies", esc(s.get("medium"))),
+                       ("Rating", f"{s['rating_a']} A, running {self.res.socket_load.get(i, 0):.0f} W" if s.get("rating_a") else None),
                        ("Height", f"{s['z']} cm" if s.get("z") is not None else None), ("Notes", esc(s.get("notes")))])]
         if users:
             body.append("<h2>Plugged in</h2><ul>" + "".join(f"<li>{self.a(u, root)} {esc((self.P.get(u) or self.S.get(u) or {}).get('name'))}</li>"
@@ -430,7 +483,8 @@ class Site:
         svg_, style = self.map(s.get("room"), self.placed_ancestor(s["parent"]) if s.get("parent") else None,
                                layout.level_of(self.lab, self.res, s["parent"]) if s.get("parent") else None, i)
         body.append(self.docs(i, root))
-        body.append(svg_)
+        if svg_:
+            body.append(f"<h2 id='where'>Where</h2>{svg_}")
         self.page(f"s/{fname(i)}.html", i, "".join(body), root, style)
 
     def room_page(self, rid):

@@ -60,6 +60,15 @@ class Directory(unittest.TestCase):
         drawer = (self.tmp / "o" / "BOX-01.html").read_text(encoding="utf-8")
         self.assertIn(">RS 000-0104</a>", drawer)  # ordering info in the drawer's item list too
 
+    def test_where_it_is_stands_out(self):
+        page = (self.tmp / "o" / "PED-01.D2.html").read_text(encoding="utf-8")  # a drawer: the pin is on its pedestal
+        self.assertIn("href='#where'", page)
+        self.assertIn("id='where'", page)
+        self.assertEqual(page.count('class="pin"'), 1)
+        self.assertIn(">PED-01.D2</text>", page)  # the pin names the drawer, not the pedestal it's shown on
+        self.assertIn("markflash", page)
+        self.assertNotIn('class="pin"', (self.tmp / "rooms" / "LAB-A.html").read_text(encoding="utf-8"))
+
     def test_document_links(self):
         self.assertEqual(site.doc_href("\\\\server\\share\\COSHH\\014.pdf"), "file://server/share/COSHH/014.pdf")
         self.assertEqual(site.doc_href("S:\\Safety\\RA-003.pdf"), "file:///S:/Safety/RA-003.pdf")

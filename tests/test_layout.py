@@ -18,37 +18,51 @@ class RoundTrip(unittest.TestCase):
             src = ROOT / "example" / name
             (shutil.copytree if src.is_dir() else shutil.copy2)(src, self.tmp / name)
         self.lab = model.load(self.tmp)
-        layout.write_layouts(self.lab, checks.run(self.lab))
+        self.res = checks.run(self.lab)
+        layout.write_layouts(self.lab, self.res)
+        self.path = layout.layout_path(self.tmp)
+        _, self.rooms, _ = layout.read_layout(self.path)
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def edit(self, room, changes):
+    def edit(self, changes):
         """changes: {id: function(old transform) -> new transform}, like dragging in Inkscape."""
-        path = layout.layout_path(self.tmp, room)
-        tree = ET.parse(path)
+        tree = ET.parse(self.path)
         for g in tree.iter(f"{SVG}g"):
             key = (g.get("id") or "")[len(layout.PREFIX):]
             if (g.get("id") or "").startswith(layout.PREFIX) and key in changes:
                 g.set("transform", changes.pop(key)(g.get("transform") or ""))
         self.assertEqual(changes, {}, "every edited object should be in the layout")
-        tree.write(path)
+        tree.write(self.path)
 
-    def pull(self, room):
-        lab = model.load(self.tmp)
-        return layout.positions(lab, room, layout.read_matrices(layout.layout_path(self.tmp, room)))
+    def relayer(self, i, key):
+        """Move i to another layer, like Layer › Move Selection to Layer Above / Below in Inkscape."""
+        tree = ET.parse(self.path)
+        parents = {c: p for p in tree.iter() for c in p}
+        g = next(e for e in tree.iter(f"{SVG}g") if e.get("id") == layout.PREFIX + i)
+        parents[g].remove(g)
+        next(e for e in tree.iter(f"{SVG}g") if e.get("id") == f"layer-{key}").append(g)
+        tree.write(self.path)
 
-    def test_every_object_drawn_once(self):
-        import re
+    def pull(self):
+        moves, notes = layout.layout_moves(model.load(self.tmp))
+        return moves["placeables"], moves, notes
 
-        for room in self.lab.rooms:
-            ids = re.findall(r'id="obj-([^"]+)"', layout.layout_path(self.tmp, room).read_text(encoding="utf-8"))
-            self.assertEqual(len(ids), len(set(ids)), room)
-            self.assertIn("SPEC-02" if room == "LAB-A" else "HPLC-01", ids)
+    def doc(self, room, x, y):
+        """Room coordinates to the layout file's."""
+        m = self.rooms[room]["m"]
+        return x + m[4], y + m[5]
 
-    def test_unchanged_layout_has_nothing_to_pull(self):
-        for room in self.lab.rooms:
-            self.assertEqual(self.pull(room)[0], {})
+    def centre(self, i):
+        from labmap import geometry as G
+
+        return self.doc(self.lab.placeables[i]["room"], *G.centroid(self.res.geo[i].poly))
+
+    def drag(self, i, to):
+        """Move i so that its centre lands on `to` (layout coordinates)."""
+        (x, y), (tx, ty) = self.centre(i), to
+        return {i: lambda t: f"translate({tx - x:.1f},{ty - y:.1f}) " + t}
 
     def along(self, i):
         """i and everything on or under it: what dragging a box around it in Inkscape selects."""
@@ -60,79 +74,147 @@ class RoundTrip(unittest.TestCase):
                     todo.append(c)
         return out
 
-    def centre(self, i):
-        from labmap import geometry as G
+    def test_one_file_every_object_once(self):
+        import re
 
-        return G.centroid(checks.run(self.lab).geo[i].poly)
+        ids = re.findall(r'id="obj-([^"]+)"', self.path.read_text(encoding="utf-8"))
+        self.assertEqual(len(ids), len(set(ids)))
+        self.assertTrue({"SPEC-02", "HPLC-01", "INC-01", "GB-01"} <= set(ids))  # both rooms, and the staged ones
+        self.assertEqual(set(self.rooms), {"LAB-A", "LAB-B"})
+        self.assertEqual(sorted(p.name for p in self.path.parent.iterdir()), ["labs.svg"])
+
+    def test_unchanged_layout_has_nothing_to_pull(self):
+        self.assertEqual(layout.count(self.pull()[1]), 0)
 
     def test_moves_come_back_as_data(self):
-        moves = {k: (lambda t: "translate(-50,0) " + t) for k in self.along("BENCH-02") if k != "BENCH-02.D1"}
-        moves = {k: v for k, v in moves.items() if self.lab.placeables[k].get("mount") != "in"}
+        stage = self.rooms["LAB-A"]["stage"]
+        moves = {k: (lambda t: "translate(-50,0) " + t) for k in self.along("BENCH-02")
+                 if self.lab.placeables[k].get("mount") != "part"}
         moves.update({
             "VORT-01": lambda t: "translate(-50,0) " + t + " rotate(90)",  # carried along, and turned on its bench
-            "INC-01": lambda t: "translate(400,100)",                # drag the incubator in from the staging area
-            "CART-01": lambda t: "translate(2000,50)",               # drag the trolley out to the staging area
-            "BENCH-01": lambda t: "translate(0,40) " + t,            # the sink bench is fixed: ignored
+            "BENCH-01": lambda t: "translate(0,40) " + t,                   # the sink bench is fixed: ignored
         })
-        self.edit("LAB-A", moves)
-        updates, notes = self.pull("LAB-A")
-        self.assertEqual(updates["BENCH-02"], (595, 180, "W"))
-        self.assertEqual(updates["INC-01"], (400, 100, None))
-        self.assertEqual(updates["CART-01"], (None, None, None))
-        self.assertEqual(updates["VORT-01"][2], "W")
-        self.assertNotIn("BENCH-01", updates)
+        inc = self.doc("LAB-A", 400, 100)
+        moves["INC-01"] = lambda t: f"translate({inc[0]:.1f},{inc[1]:.1f})"  # dragged in from the waiting area
+        moves.update(self.drag("CART-01", ((stage[0][0] + stage[2][0]) / 2, (stage[0][1] + stage[2][1]) / 2)))
+        self.edit(moves)
+        placed, _, notes = self.pull()
+        self.assertEqual(placed["BENCH-02"], dict(x=595, y=180, faces="W"))
+        self.assertEqual(placed["INC-01"], dict(x=400, y=100, faces=None))
+        self.assertEqual(placed["CART-01"], dict(x=None, y=None, faces=None))  # out to the waiting area
+        self.assertEqual(placed["VORT-01"]["faces"], "W")
         self.assertTrue(any("BENCH-01 is fixed" in n for n in notes))
-        self.assertEqual(set(updates), {"BENCH-02", "VORT-01", "INC-01", "CART-01"})  # the rest came along unchanged
+        self.assertEqual(set(placed), {"BENCH-02", "VORT-01", "INC-01", "CART-01"})  # the rest came along unchanged
 
     def test_bench_moved_alone_leaves_its_things(self):
-        self.edit("LAB-A", {"BENCH-02": lambda t: "translate(-30,0) " + t})
-        updates, _ = self.pull("LAB-A")
-        self.assertEqual(updates["BENCH-02"][:2], (615, 180))
-        self.assertIn("BAL-01", updates)  # stayed where it was drawn: further along its bench now
-        self.assertEqual(len(updates["BAL-01"]), 3)  # still on BENCH-02
+        self.edit({"BENCH-02": lambda t: "translate(-30,0) " + t})
+        placed, _, _ = self.pull()
+        self.assertEqual((placed["BENCH-02"]["x"], placed["BENCH-02"]["y"]), (615, 180))
+        self.assertIn("BAL-01", placed)  # stayed where it was drawn: further along its bench now
+        self.assertNotIn("parent", placed["BAL-01"])  # still on BENCH-02
 
     def test_dropped_on_another_bench(self):
-        (sx, sy), (bx, by) = self.centre("SPEC-02"), self.centre("TBL-01")
-        self.edit("LAB-A", {"SPEC-02": lambda t: f"translate({bx - sx:.1f},{by - sy:.1f}) " + t})
-        updates, _ = self.pull("LAB-A")
-        self.assertEqual(updates["SPEC-02"][3:], ("TBL-01", "on"))
-        self.assertEqual(set(updates), {"SPEC-02"})
-        lab = model.load(self.tmp, updates)  # what check --layout does: try it without writing
-        self.assertEqual(lab.placeables["SPEC-02"]["parent"], "TBL-01")
-        res = checks.run(lab)
-        g = res.geo["SPEC-02"]
-        self.assertAlmostEqual(g.z[0], 90)  # on the table top now
-        model.write_positions(self.tmp / "lab-data.xlsx", updates, self.tmp / "build" / "backups")
+        self.edit(self.drag("SPEC-02", self.centre("TBL-01")))
+        placed, moves, _ = self.pull()
+        self.assertEqual(placed["SPEC-02"]["parent"], "TBL-01")
+        self.assertNotIn("room", placed["SPEC-02"])
+        self.assertEqual(set(placed), {"SPEC-02"})
+        lab = model.load(self.tmp, moves)  # what check --layout does: try it without writing
+        self.assertAlmostEqual(checks.run(lab).geo["SPEC-02"].z[0], 90)  # on the table top now
+        model.write_moves(self.tmp / "lab-data.xlsx", moves, self.tmp / "build" / "backups")
         lab = model.load(self.tmp)
         self.assertEqual((lab.placeables["SPEC-02"]["parent"], lab.issues), ("TBL-01", []))
         layout.write_layouts(lab, checks.run(lab))
-        self.assertEqual(self.pull("LAB-A")[0], {})
+        self.assertEqual(layout.count(self.pull()[1]), 0)
 
     def test_out_from_under_a_bench(self):
-        self.edit("LAB-A", {"FRZ-02": lambda t: "translate(0,200) " + t})
-        updates, notes = self.pull("LAB-A")
-        self.assertEqual(updates["FRZ-02"][3:], (None, "floor"))
+        self.edit({"FRZ-02": lambda t: "translate(0,200) " + t})
+        placed, _, notes = self.pull()
+        self.assertEqual((placed["FRZ-02"]["parent"], placed["FRZ-02"]["mount"]), (None, "floor"))
         self.assertTrue(any("FRZ-02 isn't under anything" in n for n in notes))
 
     def test_group_moves_as_one(self):
-        self.edit("LAB-B", {k: (lambda t: "translate(-20,0) " + t) for k in self.along("BENCH-11")
-                            if self.lab.placeables[k].get("mount") != "part"})
-        updates, _ = self.pull("LAB-B")
-        self.assertEqual(updates, {"BENCH-11": (440, 0, None)})
+        self.edit({k: (lambda t: "translate(-20,0) " + t) for k in self.along("BENCH-11")
+                   if self.lab.placeables[k].get("mount") != "part"})
+        placed, moves, _ = self.pull()
+        self.assertEqual(placed, {"BENCH-11": dict(x=440, y=0, faces=None)})
+        self.assertEqual(layout.count(moves), 1)
+
+    def test_to_another_lab(self):
+        self.edit(self.drag("FTIR-01", self.centre("TBL-01")))  # LAB-B instrument onto the LAB-A table
+        placed, moves, notes = self.pull()
+        self.assertEqual((placed["FTIR-01"]["room"], placed["FTIR-01"]["parent"]), ("LAB-A", "TBL-01"))
+        self.assertEqual(moves["equipment"], {"FTIR-01": {"outlet": None}})  # its socket stayed in LAB-B
+        self.assertTrue(any("FTIR-01 moves to LAB-A" in n for n in notes))
+        model.write_moves(self.tmp / "lab-data.xlsx", moves, self.tmp / "build" / "backups")
+        self.assertEqual(model.load(self.tmp).issues, [])
+
+    def test_things_go_with_what_holds_them(self):
+        spot = self.doc("LAB-B", 600, 380)
+        self.edit({**self.drag("PED-01", spot), **self.drag("BENCH-02", self.doc("LAB-B", 450, 470))})
+        placed, moves, _ = self.pull()
+        self.assertEqual((placed["PED-01"]["room"], placed["PED-01"]["mount"]), ("LAB-B", "floor"))
+        self.assertEqual({i for i, c in placed.items() if c == {"room": "LAB-B"}},
+                         {"PED-01.D1", "PED-01.D2", "PED-01.D3", "BENCH-02.D1", "BENCH-02.D2"})  # drawers go along
+        self.assertEqual(moves["services"], {"OUT-02": {"room": "LAB-B"}})  # the socket on BENCH-02's spine
+        model.write_moves(self.tmp / "lab-data.xlsx", moves, self.tmp / "build" / "backups")
+        self.assertEqual(model.load(self.tmp).issues, [])
+
+    def test_layers_change_the_mount(self):
+        # the arriving incubator, onto the central table: move it to 'on benches', then drag it there
+        self.relayer("INC-01", "on")
+        inc_to = self.centre("TBL-01")  # it's 70 x 70 and waiting unrotated: its corner goes 35 cm up and left
+        self.edit({"INC-01": lambda t: f"translate({inc_to[0] - 35:.1f},{inc_to[1] - 35:.1f})"})
+        self.relayer("FRZ-02", "floor")  # out from under the bench, where it is
+        self.relayer("BIN-01", "under")  # the bin, under the table it already stands beneath
+        placed, _, notes = self.pull()
+        self.assertEqual((placed["INC-01"]["mount"], placed["INC-01"]["parent"]), ("on", "TBL-01"))
+        self.assertEqual((placed["FRZ-02"]["mount"], placed["FRZ-02"]["parent"]), ("floor", None))
+        self.assertEqual((placed["BIN-01"]["mount"], placed["BIN-01"]["parent"]), ("under", "TBL-01"))
+        self.assertTrue(any("FRZ-02 was moved to the 'floor and benches' layer" in n for n in notes))
+        model.write_moves(self.tmp / "lab-data.xlsx", self.pull()[1], self.tmp / "build" / "backups")
+        lab = model.load(self.tmp)
+        self.assertEqual(lab.issues, [])
+        layout.write_layouts(lab, checks.run(lab))
+        self.assertEqual(layout.count(self.pull()[1]), 0)  # redrawn on the right layers: nothing left to pull
+
+    def test_dropped_outside_every_room(self):
+        self.edit(self.drag("BENCH-02", self.doc("LAB-B", 700, 550)))  # LAB-B's missing corner: not a room
+        placed, moves, notes = self.pull()
+        self.assertEqual(layout.count(moves), 0)  # nothing changes, not even what stands on it
+        self.assertTrue(any("BENCH-02 is outside every room" in n for n in notes))
 
     def test_written_to_workbook_and_layout_protected(self):
-        self.edit("LAB-A", {"CART-01": lambda t: "translate(-30,0) " + t})
-        updates, _ = self.pull("LAB-A")
+        self.edit({"CART-01": lambda t: "translate(-30,0) " + t})
+        _, moves, _ = self.pull()
         lab = model.load(self.tmp)
-        result = layout.write_layouts(lab, checks.run(lab))  # moves not pulled yet: must not overwrite
-        self.assertIn("kept", dict((r, s) for r, _, s in result)["LAB-A"])
-        backup, missing = model.write_positions(self.tmp / "lab-data.xlsx", updates, self.tmp / "build" / "backups")
+        path, status = layout.write_layouts(lab, checks.run(lab))  # moves not pulled yet: must not overwrite
+        self.assertIn("kept", status)
+        backup, missing = model.write_moves(self.tmp / "lab-data.xlsx", moves, self.tmp / "build" / "backups")
         self.assertTrue(backup.exists())
         self.assertEqual(missing, [])
         lab = model.load(self.tmp)
         self.assertEqual((lab.placeables["CART-01"]["x"], lab.placeables["CART-01"]["y"]), (410, 300))
         self.assertEqual(lab.issues, [])
-        self.assertEqual(self.pull("LAB-A")[0], {})  # layout and workbook agree again
+        self.assertEqual(layout.count(self.pull()[1]), 0)  # layout and workbook agree again
+
+    def test_comparison_and_move_list(self):
+        from labmap import report
+
+        self.edit(self.drag("SPEC-02", self.centre("TBL-01")))
+        _, moves, _ = self.pull()
+        before = self.res
+        after = checks.run(model.load(self.tmp, moves))
+        rows = report.move_rows(before, after, moves)
+        self.assertEqual(len(rows), 1)
+        what, frm, to, plug, _ = rows[0]
+        self.assertTrue(what.startswith("SPEC-02") and "BENCH-04.B" in frm and "TBL-01" in to)
+        self.assertEqual(plug, "OUT-01 → OUT-07 (nearest)")
+        html = report.comparison(before, after)
+        self.assertIn("Overlap", html)  # dropped on the middle of the table: it lands on the microscope's spot
+        self.assertIn("worse", html)
+        page = report.write_move_list(self.tmp / "moves.html", before, after, moves, "test")
+        self.assertIn("SPEC-02", page.read_text(encoding="utf-8"))
 
 
 class Levels(unittest.TestCase):
@@ -168,7 +250,7 @@ class Levels(unittest.TestCase):
         for min_size in (4.5, 2.5):  # read-only maps, Inkscape layouts
             plan = layout.label_plan(self.lab, self.res, "LAB-A", min_size)
             self.assertTrue(all(plan[i][0] for i in ("SMU-01", "SMU-02", "SMU-03")))
-        text = layout.editable(self.lab, self.res, "LAB-A")
+        text = layout.editable(self.lab, self.res)
         for i in ("SMU-01", "SMU-02", "SMU-03"):  # each label inside its own object, so it moves with it
             own = text.split(f'id="obj-{i}"')[1].split("</g>")[0]
             self.assertRegex(own, rf">{i}</text>")

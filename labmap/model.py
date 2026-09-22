@@ -13,25 +13,27 @@ from pathlib import Path
 
 from . import svg
 
-SHEETS = ("rooms", "placeables", "equipment", "services", "circuits", "links", "items", "documents")
+SHEETS = ("rooms", "placeables", "equipment", "services", "circuits", "links", "items", "documents", "keep_apart")
 ID_SHEETS = ("rooms", "placeables", "equipment", "services", "circuits", "items", "documents")
 DATES = {("placeables", "checked"), ("documents", "filled"), ("documents", "expires")}
 ID_COLUMNS = {"id", "room", "parent", "outlet", "circuit", "fed_by", "container", "from", "to"}
 NUMERIC = {
-    "rooms": {"width", "depth", "ceiling", "cooling", "floor_load"},
+    "rooms": {"width", "depth", "ceiling", "cooling"},
     "placeables": {"x", "y", "z", "w", "d", "h", "free_under", "clear_front", "clear_back", "clear_left",
                    "clear_right", "clear_top", "fill"},
     "equipment": {"plugs", "watts_typ", "watts_max", "volts", "weight"},
-    "services": {"x", "y", "z", "sockets"},
+    "services": {"x", "y", "z", "sockets", "rating_a"},
     "circuits": {"rating_a", "volts", "phase"},
     "links": {"max_len"},
     "items": {"min_qty"},
     "documents": set(),
+    "keep_apart": {"distance"},
 }
 TEXT = {("rooms", "floor"), ("equipment", "serial"), ("equipment", "asset_tag"), ("items", "qty"), ("items", "rs_part")}
 REQUIRED = {"rooms": ("id",), "placeables": ("id", "room", "mount"), "equipment": ("id",),
             "services": ("id", "type", "room"), "circuits": ("id",), "links": ("from", "to", "type"),
-            "items": ("id",), "documents": ("id", "applies_to", "type", "status")}
+            "items": ("id",), "documents": ("id", "applies_to", "type", "status"),
+            "keep_apart": ("tag", "away_from", "distance")}
 REFS = [  # (sheet, column, sheet the value must be on)
     ("placeables", "room", "rooms"), ("placeables", "parent", "placeables"),
     ("equipment", "id", "placeables"), ("equipment", "outlet", "services"),
@@ -42,6 +44,7 @@ REFS = [  # (sheet, column, sheet the value must be on)
 ENUMS = {  # (sheet, column) -> list on the lists sheet
     ("placeables", "category"): "category", ("placeables", "mount"): "mount", ("placeables", "faces"): "faces",
     ("placeables", "fixed"): "yesno", ("placeables", "mobile"): "yesno", ("placeables", "stackable"): "yesno",
+    ("placeables", "door"): "door", ("rooms", "sprinklers"): "yesno", ("keep_apart", "level"): "level",
     ("equipment", "condition"): "condition", ("equipment", "plan"): "plan", ("equipment", "usage"): "usage",
     ("equipment", "usage_source"): "usage_source", ("equipment", "critical"): "yesno",
     ("services", "type"): "service_type", ("circuits", "rcd"): "yesno", ("circuits", "backed"): "backed",
@@ -54,11 +57,15 @@ FALLBACK_LISTS = {
     "faces": ["N", "NE", "E", "SE", "S", "SW", "W", "NW"],
     "yesno": ["yes", "no"],
     "service_type": ["outlet", "strip", "gas", "vacuum", "air", "water", "drain", "network", "exhaust"],
+    "door": ["left", "right", "both"],
+    "level": ["problem", "warning"],
 }
+UTILITIES = ("gas", "vacuum", "air", "water", "drain", "network", "exhaust")  # what the needs column can ask for
 FALLBACK_LINK_LEN = {"usb": 500, "usb3": 300, "ethernet": 10000, "serial": 1500, "gpib": 200, "video": 500}
 SETTINGS = {  # the settings sheet can change these
     "walkway_width": 60, "reach": 30, "person_height": 200, "blocks_walking_below": 150,
     "circuit_limit": 80, "heavy_load": 1000, "grid": 5, "expiry_warning_days": 30,
+    "fit_margin": 2, "door_gap": 10, "utility_reach": 300, "sprinkler_clearance": 45,
 }
 
 
@@ -81,6 +88,7 @@ class Lab:
     links: list = field(default_factory=list)
     items: dict = field(default_factory=dict)
     documents: dict = field(default_factory=dict)
+    keep_apart: list = field(default_factory=list)
     lists: dict = field(default_factory=dict)
     settings: dict = field(default_factory=lambda: dict(SETTINGS))
     issues: list = field(default_factory=list)
@@ -126,21 +134,16 @@ class Lab:
 
 
 def load(folder, moves=None):
-    """A Lab from a folder. moves: {id: (x, y, faces[, parent, mount])} applied on top of the workbook, to try an
-    arrangement from the Inkscape layouts without writing it."""
+    """A Lab from a folder. moves: {sheet: {id: {column: value}}} applied on top of the workbook, to try an
+    arrangement from the Inkscape layout without writing it (see layout.moves_from)."""
     folder = Path(folder)
     rows, lists = read_workbook(folder / "lab-data.xlsx")
-    for r in rows.get("placeables", []) if moves else []:
-        i = str(r.get("id") or "").strip().upper()
-        if i in moves:
-            _apply_move(r, moves[i])
+    for sheet, changes in (moves or {}).items():
+        for r in rows.get(sheet, []):
+            i = str(r.get("id") or "").strip().upper()
+            if i in changes:
+                r.update(changes[i])
     return build(folder, rows, lists, settings=rows.pop("_settings", None))
-
-
-def _apply_move(r, move):
-    r["x"], r["y"], r["faces"] = move[:3]
-    if len(move) > 3:
-        r["parent"], r["mount"] = move[3], move[4]
 
 
 def read_workbook(path):
@@ -215,30 +218,33 @@ def _arithmetic(expr):
         return None
 
 
-def write_positions(path, updates, backup_dir):
-    """Write {id: (x, y, faces[, parent, mount])} into the placeables sheet after copying the workbook to backup_dir.
-    Only those cells change; validation, formatting and comments are kept. Returns (backup path, ids not found)."""
+def write_moves(path, moves, backup_dir):
+    """Write {sheet: {id: {column: value}}} into the workbook after copying it to backup_dir. Only those cells
+    change; validation, formatting and comments are kept. Returns (backup path, ids not found)."""
     import shutil
     from openpyxl import load_workbook
 
     path, backup_dir = Path(path), Path(backup_dir)
     wb = load_workbook(path)
-    ws = wb["placeables"]
-    col = {c.value.strip(): c.column for c in ws[1] if isinstance(c.value, str)}
-    rows = {}
-    for n in range(3, ws.max_row + 1):
-        v = ws.cell(n, col["id"]).value
-        if v is not None:
-            rows.setdefault(str(v).strip().upper(), n)
     missing = []
-    for pid, move in updates.items():
-        n = rows.get(pid)
-        if n is None:
-            missing.append(pid)
+    for sheet, changes in moves.items():
+        if not changes:
             continue
-        for k, v in zip(("x", "y", "faces", "parent", "mount"), move):
-            if k in col:
-                ws.cell(n, col[k]).value = v
+        ws = wb[sheet]
+        col = {c.value.strip(): c.column for c in ws[1] if isinstance(c.value, str)}
+        rows = {}
+        for n in range(3, ws.max_row + 1):
+            v = ws.cell(n, col["id"]).value
+            if v is not None:
+                rows.setdefault(str(v).strip().upper(), n)
+        for i, change in changes.items():
+            n = rows.get(i)
+            if n is None:
+                missing.append(i)
+                continue
+            for k, v in change.items():
+                if k in col:
+                    ws.cell(n, col[k]).value = v
     backup_dir.mkdir(parents=True, exist_ok=True)
     backup = backup_dir / f"lab-data-{dt.datetime.now():%Y%m%d-%H%M%S}.xlsx"
     shutil.copy2(path, backup)
@@ -324,6 +330,23 @@ def _normalise(lab, sheet, r):
                 r[k] = None
         elif (sheet, k) in (("documents", "applies_to"), ("items", "spare_for")):
             r[k] = [s.strip().upper() for s in str(v).replace(",", ";").split(";") if s.strip()]
+        elif (sheet, k) in (("placeables", "tags"),):
+            r[k] = [s.strip().lower() for s in str(v).replace(",", ";").split(";") if s.strip()]
+        elif sheet == "keep_apart" and k in ("tag", "away_from"):
+            r[k] = str(v).strip().lower()
+        elif (sheet, k) == ("equipment", "needs"):
+            got = []
+            for s in str(v).replace(",", ";").split(";"):
+                kind, _, medium = s.strip().partition(":")
+                kind = kind.strip().lower()
+                if not kind:
+                    continue
+                if kind not in UTILITIES:
+                    lab.issue(f"{label(sheet, r)}: needs {s.strip()!r}: use {', '.join(UTILITIES)} (optionally :medium)",
+                              [r.get("id")] if r.get("id") else [])
+                    continue
+                got.append((kind, medium.strip() or None))
+            r[k] = got
     for (sh, col), list_name in ENUMS.items():
         v = r.get(col)
         allowed = lab.allowed(list_name) if sh == sheet and v is not None else None
@@ -374,6 +397,7 @@ def build(folder, rows, lists=None, room_polys=None, settings=None):
                 table[r["id"]] = r
         setattr(lab, sheet, table)
     lab.links = tables["links"]
+    lab.keep_apart = tables["keep_apart"]
     for sheet, col, target in REFS:
         pool = getattr(lab, target)
         for r in lab.links if sheet == "links" else getattr(lab, sheet).values():

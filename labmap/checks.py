@@ -14,16 +14,23 @@ from . import geometry as G
 from .model import Finding, stock
 
 NOT_OBSTACLES = {"door", "window", "workspace"}
+SPRINKLER_EXEMPT = {"door", "window", "structure", "overhead", "workspace"}  # built in, not stored or placed
+LINK_FOR = {"gas": {"gas-line"}, "vacuum": {"gas-line"}, "air": {"gas-line"}, "water": {"water-line"},
+            "drain": {"water-line"}, "exhaust": {"exhaust"}, "network": {"ethernet"}}  # links that meet a need
 STACKABLE = {"bench", "desk", "table", "shelf", "cabinet", "cart"}  # things may stand on these unless stackable = no
 
 RULES = {  # rule: (title, what it means, level). {placeholders} are settings.
     "data": ("Data problems", "Rows the checks couldn't use as they are. Fix these first: they can hide other problems.", "problem"),
     "outside-room": ("Outside the room", "The footprint crosses the room's outline.", "problem"),
     "off-parent": ("Off its support", "Sits on or under something but sticks out of it.", "problem"),
-    "under-fit": ("Doesn't fit underneath", "Taller than the free space under its parent, or the parent has no free_under.", "problem"),
+    "under-fit": ("Doesn't fit underneath", "Taller than the free space under its parent less {fit_margin} cm of slack, "
+                                            "or the parent has no free_under.", "problem"),
     "overlap": ("Overlap", "Two footprints overlap on the plan and in height.", "problem"),
     "clear-zone": ("Clear zone blocked", "Something stands in space that has to stay free.", "problem"),
-    "headroom": ("Headroom", "Not enough space above: a lid, sash or stack hits a shelf or the ceiling.", "problem"),
+    "headroom": ("Headroom", "Not enough space above: a lid, sash or stack hits a shelf, or comes within {fit_margin} cm "
+                             "of the ceiling.", "problem"),
+    "sprinkler": ("Too close to the sprinklers", "Reaches higher than {sprinkler_clearance} cm below the ceiling of a room "
+                                                "with sprinklers (built-in things, fixed = yes, excepted).", "problem"),
     "wall-clearance": ("Clear zone into a wall", "The space that has to stay free runs into a wall.", "problem"),
     "walkway": ("Can't be reached", "No path at least {walkway_width} cm wide from a door to the space in front of it.", "problem"),
     "no-socket": ("No socket", "Needs power, but there's no socket or strip in the room to plug into.", "problem"),
@@ -34,6 +41,11 @@ RULES = {  # rule: (title, what it means, level). {placeholders} are settings.
                         "Must never lose power, but shares its circuit with something peaking at {heavy_load} W or more.", "problem"),
     "heat": ("Too much heat", "Equipment gives off more heat than the room's cooling can remove.", "problem"),
     "cable-reach": ("Too far apart", "The cable or tubing run is longer than allowed.", "problem"),
+    "utility": ("Service out of reach", "Needs gas, water, drain, vacuum, air, network or exhaust (needs column), and there "
+                                       "isn't one within {utility_reach} cm, or a link to one.", "problem"),
+    "socket-load": ("Socket or strip overloaded", "Running load above its rating_a.", "problem"),
+    "keep-apart": ("Too close together", "Things the keep_apart sheet says must be kept apart, closer than allowed.",
+                   "problem"),
     "document-expired": ("Document expired", "A form or certificate on the documents sheet is past its expiry date.",
                          "problem"),
     "document-expiring": ("Document expiring soon", "Expires within {expiry_warning_days} days.", "warning"),
@@ -46,6 +58,10 @@ RULES = {  # rule: (title, what it means, level). {placeholders} are settings.
                   "A required spare (min_qty filled on the items sheet) with none left. A blank qty counts as none.",
                   "warning"),
     "spare-low": ("Spare part running low", "Fewer in stock than its min_qty.", "warning"),
+    "keep-apart-near": ("Close together", "Things the keep_apart sheet would rather keep apart, closer than it suggests.",
+                        "warning"),
+    "door-fit": ("Won't fit through the door", "Arriving or moving (plan new or relocate), but bigger than every door of "
+                                               "its room, even on its side, allowing {fit_margin} cm.", "warning"),
 }
 
 
@@ -68,6 +84,7 @@ class Result:
     heat: dict = field(default_factory=dict)        # room -> W
     runs: list = field(default_factory=list)        # (link, run in cm or None, limit in cm or None)
     walk_notes: dict = field(default_factory=dict)  # room -> why walkways weren't checked
+    socket_load: dict = field(default_factory=dict)  # socket or strip with a rating_a -> running W through it
 
     def add(self, rule, message, ids=(), room=None):
         self.findings.append(Finding(rule, message, tuple(ids), room))
@@ -88,13 +105,16 @@ def run(lab, today=None):
     _spares(res)
     _power(res)
     _links(res)
+    _utilities(res)
+    _keep_apart(res)
+    _doors(res)
     blocked = {f.ids[0] for f in res.findings if f.rule == "clear-zone"}
     for rid in lab.rooms:
         _walkways(res, rid, blocked)
     return res
 
 
-def zones(r, g, person=200):
+def zones(r, g, person=200, door_gap=G.DOOR_GAP):
     """[(side, polygon, height band)] of the space an object needs kept free."""
     zr = (0, person) if r.get("mount") in ("floor", "wall", "part") else g.z
     if r.get("category") == "window":
@@ -103,7 +123,7 @@ def zones(r, g, person=200):
     if g.zone:
         out.append(("front", g.zone, zr))
     else:
-        for side, (u0, v0, u1, v1) in G.clear_boxes(r, *g.size).items():
+        for side, (u0, v0, u1, v1) in G.clear_boxes(r, *g.size, door_gap).items():
             out.append((side, [g.T(u0, v0), g.T(u1, v0), g.T(u1, v1), g.T(u0, v1)], zr))
     if r.get("clear_top"):
         out.append(("top", g.poly, (g.z[1], g.z[1] + r["clear_top"])))
@@ -156,19 +176,26 @@ def _geometry(res):
                 fu = P[parent].get("free_under")
                 if fu is None:
                     res.add("under-fit", f"{i} is under {parent}, but {parent} has no free_under", [i, parent], rid)
-                elif r["h"] > fu:
-                    res.add("under-fit", f"{i} is {r['h']} cm tall, but only {fu} cm is free under {parent}",
-                            [i, parent], rid)
+                elif r["h"] + s["fit_margin"] > fu:
+                    res.add("under-fit", f"{i} is {r['h']} cm tall, and {fu} cm is free under {parent}"
+                                         f" (with {s['fit_margin']} cm to spare, {fu - s['fit_margin']} cm)", [i, parent], rid)
             if r.get("mount") == "on" and parent in P:
                 pr = P[parent]
                 if (pr.get("stackable") or ("yes" if pr.get("category") in STACKABLE else "no")) == "no":
                     res.add("not-stackable", f"{i} sits on {parent}, which isn't marked stackable", [i, parent], rid)
             top = g.z[1] + (r.get("clear_top") or 0)
-            if ceiling and top > ceiling + G.EPS:
-                what = (f"reaches {g.z[1]:.0f} cm" if g.z[1] > ceiling + G.EPS
+            slack = 0 if r.get("category") in ("structure", "overhead") else s["fit_margin"]  # built to the ceiling
+            if ceiling and top + slack > ceiling + G.EPS:
+                what = (f"reaches {g.z[1]:.0f} cm" if g.z[1] + slack > ceiling + G.EPS
                         else f"needs {r['clear_top']} cm above it (up to {top:.0f} cm)")
                 res.add("headroom", f"{i} {what}, but the ceiling is at {ceiling} cm", [i, rid], rid)
-            for side, zp, zr in zones(r, g, s["person_height"]):
+            if (ceiling and room.get("sprinklers") == "yes" and r.get("category") not in SPRINKLER_EXEMPT
+                    and r.get("fixed") != "yes"):  # built-in fittings (a ducted fume hood) are the building's business
+                limit = ceiling - s["sprinkler_clearance"]
+                if g.z[1] > limit + G.EPS:
+                    res.add("sprinkler", f"{i} reaches {g.z[1]:.0f} cm; with sprinklers, nothing above {limit:.0f} cm "
+                                         f"({s['sprinkler_clearance']} cm below the {ceiling} cm ceiling)", [i, rid], rid)
+            for side, zp, zr in zones(r, g, s["person_height"], s["door_gap"]):
                 if (side != "top" and outline and i not in window and r.get("mount") in ("floor", "wall", "part")
                         and not G.contains(outline, zp)):
                     res.add("wall-clearance", f"{i}'s {side} clear zone runs into a wall", [i], rid)
@@ -324,6 +351,21 @@ def _power(res):
         if cool and w > cool:
             res.add("heat", f"{rid} has {w:.0f} W of equipment and {cool} W of cooling", [rid], rid)
 
+    def carried(sid, seen=()):
+        """Running W through a socket or strip: what's plugged into it, and into strips it feeds."""
+        own = sum(E[e].get("watts_typ") or 0 for e, t in res.assign.items() if t == sid)
+        return own + sum(carried(k, seen + (sid,)) for k, t in S.items()
+                         if t.get("fed_by") == sid and k not in seen and k != sid)
+
+    for sid, s in S.items():
+        if s.get("rating_a") and s.get("type") in ("outlet", "strip"):
+            volts = lab.circuits.get(res.circuit_of.get(sid), {}).get("volts") or 230
+            w, limit = carried(sid), s["rating_a"] * volts
+            res.socket_load[sid] = w
+            if w > limit:
+                res.add("socket-load", f"{sid} carries {w:.0f} W; it's rated {s['rating_a']} A × {volts} V = {limit:.0f} W",
+                        [sid], s.get("room"))
+
 
 def _links(res):
     lab, geo = res.lab, res.geo
@@ -336,6 +378,83 @@ def _links(res):
             res.add("cable-reach", f"{link['from']} → {link['to']} ({link['type']}) needs about {run / 100:.1f} m; "
                                    f"the limit is {limit / 100:.1f} m", [link["from"], link["to"]],
                     lab.placeables.get(link["from"], {}).get("room"))
+
+
+def _utilities(res):
+    lab, geo, P, S = res.lab, res.geo, res.lab.placeables, res.lab.services
+    reach = lab.settings["utility_reach"]
+    for eid, e in lab.equipment.items():
+        needs = e.get("needs") or []
+        pos = G.position(lab, geo, eid) if needs and eid in P else None
+        if pos is None:
+            continue
+        rid = P[eid].get("room")
+        linked = {link.get("type") for link in lab.links if eid in (link.get("from"), link.get("to"))}
+        for kind, medium in needs:
+            what = f"{kind} ({medium})" if medium else kind
+            if LINK_FOR.get(kind, set()) & linked:
+                continue  # connected on the links sheet: its length is checked there
+            cands = []
+            for sid, s in S.items():
+                if s.get("room") != rid or s.get("type") != kind:
+                    continue
+                if medium and medium.lower() not in str(s.get("medium") or "").lower():
+                    continue
+                sp = G.service_position(lab, geo, s)
+                if sp is not None:
+                    run = abs(sp[0] - pos[0]) + abs(sp[1] - pos[1]) + abs((s.get("z") or pos[2]) - pos[2])
+                    cands.append((run, sid))
+            if not cands:
+                res.add("utility", f"{eid} needs {what}, but {rid} has no {what} point with a position", [eid], rid)
+            elif min(cands)[0] > reach:
+                run, sid = min(cands)
+                res.add("utility", f"{eid} needs {what}: the nearest, {sid}, is about {run / 100:.1f} m away "
+                                   f"(reach {reach / 100:.1f} m)", [eid, sid], rid)
+
+
+def _keep_apart(res):
+    lab, geo, P = res.lab, res.geo, res.lab.placeables
+    tagged = {}
+    for i, r in P.items():
+        if geo.get(i) and geo[i].poly:
+            for t in r.get("tags") or []:
+                tagged.setdefault(t, []).append(i)
+    seen = set()
+    for rule in lab.keep_apart:
+        a_tag, b_tag, dist = rule.get("tag"), rule.get("away_from"), rule.get("distance")
+        if not (a_tag and b_tag and dist):
+            continue
+        kind = "keep-apart" if rule.get("level") == "problem" else "keep-apart-near"
+        for a in tagged.get(a_tag, []):
+            for b in tagged.get(b_tag, []):
+                if a == b or geo[a].room != geo[b].room or (a, b, a_tag, b_tag) in seen:
+                    continue
+                seen.add((a, b, a_tag, b_tag))
+                gap = G.poly_distance(geo[a].poly, geo[b].poly)
+                if gap < dist:
+                    why = f": {rule['why']}" if rule.get("why") else ""
+                    res.add(kind, f"{a} ({a_tag}) is {gap:.0f} cm from {b} ({b_tag}); keep them at least {dist} cm "
+                                  f"apart{why}", [a, b], geo[a].room)
+
+
+def _doors(res):
+    lab, P, m = res.lab, res.lab.placeables, res.lab.settings["fit_margin"]
+    doors = {}
+    for i, r in P.items():
+        if r.get("category") == "door" and r.get("w") and r.get("h"):
+            doors.setdefault(r.get("room"), []).append((r["w"], r["h"], i))
+    for i, e in lab.equipment.items():
+        r = P.get(i)
+        if not r or e.get("plan") not in ("new", "relocate") or r.get("shape") == "group":
+            continue
+        dims = [r.get(k) for k in ("w", "d", "h")]
+        if None in dims or not doors.get(r.get("room")):
+            continue
+        a, b, _ = sorted(dims)
+        if not any(a + m <= dw and b + m <= dh for dw, dh, _ in doors[r["room"]]):
+            dw, dh, di = max(doors[r["room"]])
+            res.add("door-fit", f"{i} is {r['w']} × {r['d']} × {r['h']} cm and won't pass through any door of "
+                                f"{r['room']}, even on its side (widest: {di}, {dw} × {dh} cm)", [i, di], r["room"])
 
 
 def _walkways(res, rid, skip):

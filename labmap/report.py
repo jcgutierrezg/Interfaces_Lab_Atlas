@@ -3,13 +3,15 @@ from __future__ import annotations
 
 import datetime as dt
 import html
+from collections import defaultdict
 from pathlib import Path
 
 from . import metrics
 from .checks import RULES, describe, spare_state
 from .model import order_links
 
-CSS = """.banner { background: #fffaeb; border: 1px solid #fedf89; color: #93370d; padding: 10px 14px; border-radius: 6px; font-weight: 600; }
+CSS = """.done { width: 36px; text-align: center; }
+.banner { background: #fffaeb; border: 1px solid #fedf89; color: #93370d; padding: 10px 14px; border-radius: 6px; font-weight: 600; }
 
 :root { --ink:#1f2328; --muted:#59636e; --line:#d1d9e0; --soft:#f6f8fa; --bad:#b42318; --badbg:#fef3f2;
         --ok:#067647; --okbg:#ecfdf3; --accent:#1f4e79; }
@@ -76,7 +78,111 @@ def pct(x):
     return "" if x is None else f"{x:.0%}"
 
 
-def write(res, path, banner=None):
+def summary(res):
+    """The numbers two arrangements are compared on."""
+    groups, warned = res.by_rule("problem"), res.by_rule("warning")
+    free = defaultdict(float)
+    for s in metrics.surfaces(res):
+        free[s["room"]] += s["area"] * s["free"]
+    return dict(problems=sum(len(v) for k, v in groups.items() if k != "data"),
+                warnings=sum(len(v) for v in warned.values()),
+                rules={k: len(v) for k, v in {**groups, **warned}.items() if k != "data"},
+                free=dict(free), flows={w["tag"]: w for w in metrics.workflows(res)})
+
+
+def _verdict(better):
+    return ("html", f"<span class='{'ok' if better else 'bad'}'>{'better' if better else 'worse'}</span>")
+
+
+def _spread(w):
+    if not w:
+        return ""
+    if w["split"]:
+        return "split: " + " + ".join(w["rooms"])
+    return f"{w['spread']:.1f} m" if w["spread"] is not None else ""
+
+
+def comparison(before, after):
+    """Table: the arrangement now (lab-data.xlsx) against the one tried. Only what changes, plus the totals."""
+    b, a, s = summary(before), summary(after), after.lab.settings
+    rows = []
+
+    def row(what, x, y, lower_is_better=True, always=False):
+        if x != y or always:
+            rows.append((what, x, y, "" if x == y else _verdict((y < x) == lower_is_better)))
+
+    row("Problems", b["problems"], a["problems"], always=True)
+    row("Warnings", b["warnings"], a["warnings"], always=True)
+    for rule in RULES:
+        if rule != "data":
+            row(f"· {describe(rule, s)[0]}", b["rules"].get(rule, 0), a["rules"].get(rule, 0))
+    for rid in sorted(set(b["free"]) | set(a["free"])):
+        row(f"Free bench space in {rid}, m²", round(b["free"].get(rid, 0), 2), round(a["free"].get(rid, 0), 2),
+            lower_is_better=False)
+    for tag in sorted(set(b["flows"]) | set(a["flows"])):
+        wb, wa = b["flows"].get(tag), a["flows"].get(tag)
+        if wb and wa and _spread(wb) != _spread(wa):
+            worse = (wa["split"] and not wb["split"]) or (
+                wa["split"] == wb["split"] and (wa["spread"] or 0) > (wb["spread"] or 0))
+            rows.append((f"Workflow '{tag}': how spread out", _spread(wb), _spread(wa), _verdict(not worse)))
+    return table(["", "Now (lab-data.xlsx)", "As drawn", ""], rows)
+
+
+def _where(P, i):
+    r = P[i]
+    if r.get("mount") == "in":
+        return f"{r.get('room')} · in {r.get('parent')}"
+    host = f"{r['mount']} {r['parent']}" if r.get("parent") else "on the floor" if r.get("mount") == "floor" else "on the wall"
+    spot = "not placed" if r.get("x") is None else f"at {r['x']}, {r['y']}" + (f", facing {r['faces']}" if r.get("faces") else "")
+    return f"{r.get('room')} · {host}, {spot}"
+
+
+def move_rows(before, after, moves):
+    """(what, from, to, re-plug, notes) for each thing that moves: the list to hand out on moving day."""
+    Pb, Pa = before.lab.placeables, after.lab.placeables
+    changes = moves.get("placeables", {})
+    out = []
+    for i, change in sorted(changes.items(), key=lambda kv: (Pb[kv[0]].get("room") or "", kv[0])):
+        if set(change) == {"room"}:
+            continue  # drawers and the like: they go with their parent
+        pb, pa = before.assign.get(i), after.assign.get(i)
+        plug = "" if pb == pa else f"{pb or 'none'} → {pa or 'none'}" + (" (nearest)" if i in after.nearest else "")
+        notes = []
+        along = [k for k, c in changes.items() if set(c) == {"room"} and Pb[k].get("parent") == i]
+        if along:
+            notes.append("take along " + ", ".join(along))
+        if i in moves.get("equipment", {}):
+            notes.append(f"outlet {before.lab.equipment[i].get('outlet')} cleared: fill in the new one")
+        out.append((f"{i} {Pb[i].get('name') or ''}".strip(), _where(Pb, i), _where(Pa, i), plug, "; ".join(notes)))
+    for sid, change in sorted(moves.get("services", {}).items()):
+        s = before.lab.services[sid]
+        out.append((f"{sid} ({s.get('type')})", s.get("room"), change["room"], "",
+                    f"goes with {s.get('parent')}: check its circuit in the new room"))
+    return out
+
+
+def move_list(before, after, moves):
+    rows = move_rows(before, after, moves)
+    return table(["What", "From", "To", "Re-plug", "Notes"], rows) if rows else "<p class='note'>Nothing moves.</p>"
+
+
+def write_move_list(path, before, after, moves, note=""):
+    """A printable page: every move, with a box to tick."""
+    rows = move_rows(before, after, moves)
+    body = "".join("<tr><td class='done'>&#9744;</td>" + "".join(f"<td>{esc(v)}</td>" for v in r) + "</tr>" for r in rows)
+    text = (f"<!doctype html><html lang='en'><head><meta charset='utf-8'><title>Move list</title><style>{CSS}</style>"
+            f"</head><body><main><h1>Move list</h1><div class='sub'>{esc(note)}</div>"
+            f"<table><thead><tr><th class='done'>Done</th><th>What</th><th>From</th><th>To</th><th>Re-plug</th>"
+            f"<th>Notes</th></tr></thead><tbody>{body}</tbody></table></main></body></html>")
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def write(res, path, banner=None, before=None, moves=None):
+    """The report. With before (the checks on lab-data.xlsx as it is) and moves, it's for an arrangement being
+    tried: a comparison with the current one and the move list come first."""
     lab = res.lab
     derate = lab.settings["circuit_limit"] / 100
     groups, warned = res.by_rule("problem"), res.by_rule("warning")
@@ -102,7 +208,16 @@ def write(res, path, banner=None):
     out.append("<div class='chips'>" + "".join(chips) + "</div>")
     sections = ["Problems", "Warnings", "Progress", "Rooms", "Bench space", "Power", "Connections", "Documents",
                 "Spare parts", "Triage", "Workflow groups", "Containers", "Not placed yet"]
+    if before is not None:
+        sections = ["Compared", "Move list"] + sections
     out.append("<nav>" + "".join(f"<a href='#{s.lower().replace(' ', '-')}'>{s}</a>" for s in sections) + "</nav>")
+    if before is not None:
+        out.append("<h2 id='compared'>Compared with lab-data.xlsx</h2><p class='note'>The arrangement in the "
+                   "spreadsheet against the one drawn in the layout: the totals, and whatever changes.</p>")
+        out.append(comparison(before, res))
+        out.append("<h2 id='move-list'>Move list</h2><p class='note'>What moves where, and which socket it plugs into "
+                   "before and after. pull saves it as a printable page too.</p>")
+        out.append(move_list(before, res, moves or {}))
 
     for heading, found_by_rule, empty in (("Problems", groups, "No problems found."),
                                           ("Warnings", warned, "No warnings.")):
