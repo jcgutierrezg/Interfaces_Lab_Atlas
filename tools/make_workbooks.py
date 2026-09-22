@@ -212,7 +212,7 @@ README = [
     ("settings sheet: the thresholds the checks use (walkway width, circuit limit, ...). Change them to match your rules.", ""),
     ("keep_apart sheet: which tags (tags column on placeables) must be kept how far apart, e.g. vibrates / "
      "vibration-sensitive. Add your own rows.", ""),
-    ("Photos and SOPs aren't listed here: they're linked by file name (see README.md).", ""),
+    ("Photos and SOPs aren't listed here: they're linked by file name (see docs/adding-things.md).", ""),
     ("", ""),
 ]
 
@@ -221,7 +221,7 @@ def write_readme(ws, example):
     ws.column_dimensions["A"].width = 125
     ws.sheet_view.showGridLines = False
     last = ("This is the worked EXAMPLE. Your own data goes in ../lab-data.xlsx." if example else
-            "Full guide: README.md in this folder. Worked example: example/lab-data.xlsx.")
+            "Full guide: README.md and the docs folder. Worked example: example/lab-data.xlsx.")
     for r, (text, style) in enumerate(README + [(last, "bold")], 1):
         c = ws.cell(r, 1, text or None)
         c.alignment = Alignment(wrap_text=True, vertical="top")

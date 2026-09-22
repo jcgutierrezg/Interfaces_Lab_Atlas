@@ -3,7 +3,7 @@
   SHAPE PROFILE TEMPLATE  (1 unit = 1 cm)
   Only for the rare object that is not a rectangle, not a circle, and not a group of rectangles.
   L, U and T benches: use shape = group with rectangular parts. Benches along a chamfered corner:
-  a group with a diagonal part (faces NE/SE/SW/NW). See the README for both.
+  a group with a diagonal part (faces NE/SE/SW/NW). See docs/spreadsheet-reference.md (Shapes) for both.
 
   1. Save a copy as shapes/<name>.svg, then set shape = @<name> on the placeables row(s).
      One profile can serve every identical unit.

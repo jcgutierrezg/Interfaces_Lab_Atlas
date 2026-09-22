@@ -4,13 +4,12 @@ A complete, fictional two-room lab, filled in the way `lab-data.xlsx` should be.
 entered, and as the test case for the build steps while the real data is collected: the layout generator, the
 check report and the directory should all work on this folder before they're pointed at real data.
 
-Everything follows the conventions in `../README.md`. The photos are placeholders and the SOP text is
+Everything follows the [spreadsheet reference](../docs/spreadsheet-reference.md). The photos are placeholders and the SOP text is
 illustrative, not validated procedure.
 
 ## Playing with it
 
-The `.bat` files in this folder do the same as the ones in the main folder (see *Double-click shortcuts* in
-`../README.md`), but on the example. Double-click them in this order to see the whole workflow:
+The `.bat` files in this folder do the same as the ones in the main folder (see [Double-click shortcuts](../docs/setup.md#double-click-shortcuts-bat-files)), but on the example. Double-click them in this order to see the whole workflow:
 
 1. `check.bat`: the report, with the fourteen deliberate problems and seven warnings listed below.
 2. `site.bat`: the lab directory. Search for "allen key", open `MIC-01`, try the level and sockets buttons.
@@ -113,7 +112,7 @@ above follow from them. Walkways are checked too: every clear zone in front of a
 station must be reachable from a door along a path at least 60 cm wide. The example has no walkway problem; the
 unit tests in `tests/` cover that rule, and the others the example doesn't trigger.
 
-- **Positions:** every object is converted to room coordinates through its parent chain (see `../README.md`).
+- **Positions:** every object is converted to room coordinates through its parent chain (see the [spreadsheet reference](../docs/spreadsheet-reference.md#where-things-are-parent-mount-position)).
   Profiles use their own footprint and clearance outlines.
 - **Collisions:** two footprints collide when they overlap on the plan *and* in height. Furniture with
   `free_under` only occupies the band from `free_under` up to `h`, so anything up to `free_under` tall can sit
