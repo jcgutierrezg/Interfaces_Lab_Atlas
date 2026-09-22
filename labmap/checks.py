@@ -11,6 +11,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 
 from . import geometry as G
+from . import md
 from .model import Finding, stock
 
 NOT_OBSTACLES = {"door", "window", "workspace"}
@@ -25,6 +26,8 @@ RULES = {  # rule: (title, what it means, level). {placeholders} are settings.
     "off-parent": ("Off its support", "Sits on or under something but sticks out of it.", "problem"),
     "under-fit": ("Doesn't fit underneath", "Taller than the free space under its parent less {fit_margin} cm of slack, "
                                             "or the parent has no free_under.", "problem"),
+    "in-fit": ("Doesn't fit inside", "Taller than the working space inside its fume hood (or other enclosure), less "
+                                     "{fit_margin} cm of slack.", "problem"),
     "overlap": ("Overlap", "Two footprints overlap on the plan and in height.", "problem"),
     "clear-zone": ("Clear zone blocked", "Something stands in space that has to stay free.", "problem"),
     "headroom": ("Headroom", "Not enough space above: a lid, sash or stack hits a shelf, or comes within {fit_margin} cm "
@@ -58,8 +61,11 @@ RULES = {  # rule: (title, what it means, level). {placeholders} are settings.
                   "A required spare (min_qty filled on the items sheet) with none left. A blank qty counts as none.",
                   "warning"),
     "spare-low": ("Spare part running low", "Fewer in stock than its min_qty.", "warning"),
+    "left-behind": ("Still pointing at something decommissioned", "It's gone, but rows or files still refer to it: "
+                    "move, re-link, delete or archive them (the Decommissioning section lists them all).", "warning"),
     "keep-apart-near": ("Close together", "Things the keep_apart sheet would rather keep apart, closer than it suggests.",
                         "warning"),
+    "sash": ("Too close to the sash", "Inside a fume hood, less than {sash_clearance} cm behind the sash.", "warning"),
     "door-fit": ("Won't fit through the door", "Arriving or moving (plan new or relocate), but bigger than every door of "
                                                "its room, even on its side, allowing {fit_margin} cm.", "warning"),
 }
@@ -108,6 +114,7 @@ def run(lab, today=None):
     _utilities(res)
     _keep_apart(res)
     _doors(res)
+    _left_behind(res)
     blocked = {f.ids[0] for f in res.findings if f.rule == "clear-zone"}
     for rid in lab.rooms:
         _walkways(res, rid, blocked)
@@ -172,6 +179,21 @@ def _geometry(res):
             pg = geo.get(parent)
             if r.get("mount") in ("on", "under") and pg and pg.poly and not G.contains(pg.poly, g.poly):
                 res.add("off-parent", f"{i} sticks out of {parent}", [i, parent], rid)
+            if r.get("mount") == "in" and pg:
+                inside = G.interior_poly(lab, parent, pg)
+                inner_h = G.interior(lab, parent)[4]
+                if inside and not G.contains(inside, g.poly):
+                    res.add("off-parent", f"{i} sticks out of the working space inside {parent}", [i, parent], rid)
+                if inner_h and r["h"] + s["fit_margin"] > inner_h:
+                    res.add("in-fit", f"{i} is {r['h']} cm tall, and {parent} has {inner_h} cm inside"
+                                      f" (with {s['fit_margin']} cm to spare, {inner_h - s['fit_margin']} cm)", [i, parent], rid)
+                if inside and P[parent].get("category") == "fume-hood":
+                    (ax, ay), (bx, by) = inside[3], inside[2]  # the front edge: the sash
+                    gap = min(abs((bx - ax) * (ay - py) - (ax - px) * (by - ay)) / math.hypot(bx - ax, by - ay)
+                              for px, py in g.poly)
+                    if gap < s["sash_clearance"]:
+                        res.add("sash", f"{i} is {gap:.0f} cm behind {parent}'s sash; keep work at least "
+                                        f"{s['sash_clearance']} cm inside", [i, parent], rid)
             if r.get("mount") == "under" and parent in P:
                 fu = P[parent].get("free_under")
                 if fu is None:
@@ -455,6 +477,66 @@ def _doors(res):
             dw, dh, di = max(doors[r["room"]])
             res.add("door-fit", f"{i} is {r['w']} × {r['d']} × {r['h']} cm and won't pass through any door of "
                                 f"{r['room']}, even on its side (widest: {di}, {dw} × {dh} cm)", [i, di], r["room"])
+
+
+def _with_parts(lab, i):
+    """i and what goes with it: its drawers, cabinet shelves and parts (not what stands on or in it)."""
+    out, todo = {i}, [i]
+    while todo:
+        for c in lab.children.get(todo.pop(), []):
+            r = lab.placeables[c]
+            if c not in out and (r.get("mount") == "part" or (r.get("mount") == "in" and r.get("x") is None)):
+                out.add(c)
+                todo.append(c)
+    return out
+
+
+def references(lab, i):
+    """[(kind, id, what)]: everything still pointing at i or its drawers and parts: things standing on or in it,
+    items kept in it, spares listed for it, sockets on it, links, documents, SOPs and photos. Before it goes, the
+    to-do list; after, what was left behind."""
+    P, group, out = lab.placeables, _with_parts(lab, i), []
+    for c, r in P.items():
+        if r.get("parent") in group and c not in group:
+            how = {"on": "stands on", "under": "stands under", "in": "is inside"}.get(r.get("mount"), "is part of")
+            out.append(("placeable", c, f"{c} ({r.get('name') or ''}) {how} {r['parent']}"))
+    for it_id, it in lab.items.items():
+        if it.get("container") in group:
+            out.append(("item", it_id, f"item {it_id} ({it.get('name') or ''}) is kept in {it['container']}"))
+        if i in (it.get("spare_for") or []):
+            out.append(("item", it_id, f"spare part {it_id} ({it.get('name') or ''}) is listed for it"))
+    for sid, s in lab.services.items():
+        if s.get("parent") in group:
+            out.append(("service", sid, f"{sid} ({s.get('type')}) is mounted on {s['parent']}"))
+    for link in lab.links:
+        if i in (link.get("from"), link.get("to")):
+            other = link["to"] if link.get("from") == i else link["from"]
+            out.append(("link", other, f"the {link.get('type')} link {link['from']} → {link['to']}"))
+    for d_id, d in lab.documents.items():
+        if i in (d.get("applies_to") or []):
+            out.append(("document", d_id, f"{d_id} ({d.get('type')}) applies to it"))
+    sops = lab.folder / "sops"
+    for p in sorted(sops.glob("*.md")) if sops.is_dir() else []:
+        if p.name.startswith("_"):
+            continue
+        meta, _ = md.front_matter(p.read_text(encoding="utf-8"))
+        eq = meta.get("equipment") or []
+        if i in [str(x).strip().upper() for x in (eq if isinstance(eq, list) else [eq])]:
+            out.append(("sop", p.name, f"sops/{p.name} lists it (rename it _{p.name} to archive it)"))
+    photos = lab.folder / "photos"
+    for p in sorted(photos.iterdir()) if photos.is_dir() else []:
+        if p.is_file() and any(p.stem == g or p.stem.startswith(g + "--") for g in group):
+            out.append(("photo", p.name, f"photos/{p.name}"))
+    return out
+
+
+def _left_behind(res):
+    lab = res.lab
+    for i, when in lab.decommissioned.items():
+        since = f" on {when}" if when else ""
+        for kind, ref, what in references(lab, i):
+            ids = [ref, i] if kind in ("placeable", "item", "service", "document") else [i]
+            res.add("left-behind", f"{i} was decommissioned{since}, but {what}", ids, lab.placeables[i].get("room"))
 
 
 def _walkways(res, rid, skip):

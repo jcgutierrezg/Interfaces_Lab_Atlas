@@ -55,6 +55,7 @@ _ROWS = [
     ("Wrench set", "spanners; open-end wrench", "PED-02.D3", 1, "tool", None),
     ("Nitrogen generator filters (spare)", "n2 filter; generator filter", "CAB-02.S3", 2, "spare-part",
      "for N2G-01"),
+    ("Oven door seal", "gasket; door gasket", "CAB-01.S2", 1, "spare-part", None),
 ]
 
 from datetime import date
@@ -96,6 +97,7 @@ _MORE = {
     "Multimeter": dict(rs_part="000-0104", notes="EXAMPLE part number"),
     "Cable ties": dict(rs_part="000-0105", notes="EXAMPLE part number"),
     "Nitrile gloves, size M": dict(buy_link="https://www.example.com/gloves/nitrile-m"),
+    "Oven door seal": dict(spare_for="OVEN-01", notes="EXAMPLE WARNING: a spare for an oven that's gone"),
 }
 ITEMS = []
 for n, (name, syn, cont, qty, cat, notes) in enumerate(_ROWS, 1):

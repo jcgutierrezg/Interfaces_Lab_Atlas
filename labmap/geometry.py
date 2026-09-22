@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from .model import Finding
 
 ANG = {"S": 0, "SW": 45, "W": 90, "NW": 135, "N": 180, "NE": 225, "E": 270, "SE": 315}
-MOUNTS = {"floor", "wall", "on", "under", "part"}
+MOUNTS = {"floor", "wall", "on", "under", "part", "in"}
 EPS = 0.6  # cm: touching isn't overlapping, and rounding to whole centimetres stays quiet
 
 
@@ -174,6 +174,26 @@ def clear_boxes(r, w, d, door_gap=DOOR_GAP):
     return {k: b for k, b in boxes.items() if c[k] > 0}
 
 
+def interior(lab, i):
+    """(u0, v0, w, d, h, z) of an enclosure's working space in its own frame: centred left to right, flush with the
+    front, work surface z above its underside. None if it has no inner_w and inner_d."""
+    r = lab.placeables.get(i) or {}
+    iw, idp = r.get("inner_w"), r.get("inner_d")
+    if not iw or not idp or r.get("w") is None:
+        return None
+    w, d = r["w"], r.get("d") or r["w"]
+    return (w - iw) / 2, d - idp, iw, idp, r.get("inner_h"), r.get("inner_z") or 0
+
+
+def interior_poly(lab, i, g):
+    """An enclosure's working space in room coordinates, from its placed Geo."""
+    got = interior(lab, i)
+    if not got or not g or not g.T:
+        return None
+    u0, v0, iw, idp = got[:4]
+    return [g.T(u0, v0), g.T(u0 + iw, v0), g.T(u0 + iw, v0 + idp), g.T(u0, v0 + idp)]
+
+
 def shape_local(lab, i, r, issues):
     """(footprint, profile clearance or None) in the object's own frame, or None if it can't be drawn."""
     shape = r.get("shape") or "rect"
@@ -236,6 +256,8 @@ def place_all(lab):
         return geo[i]
 
     def _place(i):
+        if i in getattr(lab, "gone", ()):
+            return None  # decommissioned: kept as a record only
         r = P[i]
         mount, parent = r.get("mount"), r.get("parent")
         if mount not in MOUNTS:
@@ -249,13 +271,19 @@ def place_all(lab):
             origin, theta, pz0, pz1 = (0.0, 0.0), 0, 0, 0
         if r.get("x") is None or r.get("y") is None:
             return None
+        inner = interior(lab, parent) if mount == "in" else None
+        if mount == "in":
+            if inner is None:
+                return None  # inside something with no working space described: reported by the model
+            r = dict(r, x=r["x"] + inner[0], y=r["y"] + inner[1])  # x, y are measured inside
         if r.get("shape") == "group":
             return _place_group(i, r, origin, theta, pz0)
         got = in_frame(lab, i, r, origin, theta, issues)
         if got is None:
             return None
         local, lzone, T, facing = got
-        z0 = {"floor": 0, "wall": r.get("z"), "on": pz1, "under": pz0, "part": pz0}[mount]
+        z0 = {"floor": 0, "wall": r.get("z"), "on": pz1, "under": pz0, "part": pz0,
+              "in": pz0 + inner[5] if inner else None}[mount]
         if z0 is None:
             return None  # wall mount without z, reported by the model
         z1, fu = z0 + r["h"], r.get("free_under")

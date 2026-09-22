@@ -19,7 +19,7 @@ LISTS = {
     "mount": [
         ("floor", "stands on the room floor"), ("wall", "fixed to a wall; needs z"),
         ("on", "on top of parent"), ("under", "beneath parent; fits its free_under"),
-        ("in", "inside parent; no position"), ("part", "piece of a group parent"),
+        ("in", "inside parent: no position (drawer), or x/y inside a fume hood"), ("part", "piece of a group parent"),
     ],
     "faces": [("N", "front towards top of drawing"), ("NE", "diagonal, top-right"),
               ("E", "towards the right"), ("SE", "diagonal, bottom-right"),
@@ -33,7 +33,8 @@ LISTS = {
     "level": [("problem", "something is wrong"), ("warning", "worth a look")],
     "condition": [("working", ""), ("faulty", "works, with problems"), ("broken", "doesn't work"), ("unknown", "")],
     "plan": [("keep", "stays"), ("relocate", "moves within or between rooms"), ("storage", "to a store room"),
-             ("dispose", "decommission"), ("new", "arriving, needs a spot"), ("undecided", "")],
+             ("dispose", "to be decommissioned"), ("decommissioned", "gone: kept as a record"),
+             ("new", "arriving, needs a spot"), ("undecided", "")],
     "usage": [("daily", ""), ("weekly", ""), ("monthly", ""), ("yearly", "a few times a year"),
               ("never", "not used in the last year")],
     "usage_source": [("tally", "tally sheet on the instrument"), ("booking", "booking system / logs"),

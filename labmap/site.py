@@ -43,6 +43,8 @@ th { background: var(--soft); font-weight: 600; }
 table.facts th { width: 190px; background: none; color: var(--muted); font-weight: 500; }
 tr:target { background: var(--hi); animation: rowflash .8s ease-in-out 4 alternate; }
 @keyframes rowflash { from { background: var(--hi); } to { background: #ffd84d; } }
+.gone { background: #f2f4f7; border: 1px solid var(--line); border-left: 4px solid #667085; padding: 8px 12px;
+        border-radius: 6px; font-weight: 600; }
 .jump { display: inline-block; margin-left: 10px; padding: 1px 10px; border-radius: 999px; background: #e11d48;
         color: #fff; font-weight: 600; font-size: 13px; text-decoration: none; }
 .jump:hover { background: #be123c; }
@@ -263,6 +265,13 @@ class Site:
             drawing = drawing[:cut] + self.pin(rid, spot[0], spot[1], label or svc or mark) + drawing[cut:]
         return f"<div class='map' id='where-map'{attr}>{drawing}</div>", style
 
+    def chain(self, i):
+        out, j = [], self.P.get(i, {}).get("parent")
+        while j in self.P and j not in out:
+            out.append(j)
+            j = self.P[j].get("parent")
+        return out
+
     def placed_ancestor(self, i):
         j, seen = i, set()
         while j in self.P and j not in seen:
@@ -392,6 +401,15 @@ class Site:
                 if main else "")
         body = [f"<div class='top'><div><h1>{esc(i)} <span class='sub'>{esc(r.get('name'))}</span></h1>"
                 f"<p class='where'>{self.crumbs(i, root)}{jump}</p></div>{hero}</div>"]
+        if i in self.lab.gone:
+            root_id = next((j for j in [i] + self.chain(i) if j in self.lab.decommissioned), i)
+            when = self.lab.decommissioned.get(root_id)
+            left = [what for _, _, what in checks.references(self.lab, root_id)]
+            body.append(f"<p class='gone'>Decommissioned{' on ' + esc(when) if when else ''}"
+                        f"{'' if root_id == i else ' with ' + self.a(root_id, root)}. Kept as a record: it's no longer "
+                        f"on the maps, in the checks or in the search.</p>" +
+                        (f"<p class='note'>Still pointing at it:</p><ul>{''.join(f'<li>{esc(w)}</li>' for w in left)}</ul>"
+                         if left else ""))
         body += [f"<h2>How it should look</h2><a href='{root}{p[0]}'><img class='ref' src='{root}{p[0]}' "
                  f"alt='How {esc(i)} should look'></a>" for p in pics if p[2]]
         rest = [p for p in pics if not p[2] and p is not main]
@@ -462,7 +480,7 @@ class Site:
         svg_, style = self.map(r.get("room"), anchor, layout.level_of(self.lab, self.res, i), label=i)
         if svg_:
             where = "" if anchor == i else f" <span class='note'>(shown: {self.a(anchor, root)})</span>" if anchor else \
-                " <span class='note'>(not placed yet)</span>"
+                (" <span class='note'>(decommissioned)</span>" if i in self.lab.gone else " <span class='note'>(not placed yet)</span>")
             body.append(f"<h2 id='where'>Where</h2><p class='where'>{self.crumbs(i, root)}{where}</p>{svg_}")
         self.page(f"o/{fname(i)}.html", f"{i} {r.get('name') or ''}", "".join(body), root, style)
 
@@ -490,7 +508,7 @@ class Site:
     def room_page(self, rid):
         room, root = self.lab.rooms[rid], "../"
         svg_, _ = self.map(rid)
-        top = [i for i, r in self.P.items() if r.get("room") == rid and not r.get("parent")]
+        top = [i for i, r in self.P.items() if r.get("room") == rid and not r.get("parent") and i not in self.lab.gone]
         lis = "".join(f"<li>{self.a(i, root)} {esc(self.P[i].get('name'))} <span class='note'>{esc(self.P[i].get('category'))}"
                       f"{' · ' + str(len(self.lab.children.get(i, []))) + ' inside/on it' if self.lab.children.get(i) else ''}</span></li>"
                       for i in sorted(top))
@@ -526,6 +544,8 @@ class Site:
 
         loc = lambda i: re.sub(r"<[^>]+>", "", self.crumbs(i, ""))  # noqa: E731
         for i, r in self.P.items():
+            if i in self.lab.gone:
+                continue  # decommissioned: its page is kept as a record, but it isn't searched
             e = self.E.get(i, {})
             add("object", i, r.get("name"), loc(i), f"o/{fname(i)}.html",
                 extra=" ".join(str(x) for x in (r.get("category"), e.get("maker"), e.get("model"), e.get("owner"),

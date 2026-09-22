@@ -132,6 +132,9 @@ Agree on this before the walk-arounds, so everyone measures the same way. Whole 
 - **Benches and tables:** the top's height `h`; `free_under` at the **lowest** point underneath (rails, braces,
   drawer runners), not the middle.
 - **Equipment:** nameplate power; the services it needs besides power (`needs`); critical or not.
+- **Fume hoods, biosafety cabinets, gloveboxes, ovens:** the outside (`w`, `d`, `h`) as usual, and the working
+  space inside: `inner_w` (left to right), `inner_d` (sash to rear baffle), `inner_h` (above the work surface, up to
+  the sash opening) and `inner_z` (the work surface's height above the floor).
 - **Overhead:** ducts, low beams, cable trays, light fittings. Enter them as objects (category `overhead`,
   `mount = wall`, `z` = their underside): anything taller underneath is flagged. Note whether the room has
   **sprinklers** (rooms sheet): nothing may then reach within `sprinkler_clearance` (45 cm) of the ceiling.
@@ -295,6 +298,23 @@ the headroom you need (see `WS-01`).
   taps, ports and extraction points on the services sheet within `utility_reach` (3 m). A link on the links sheet
   (gas-line, water-line, exhaust, ethernet) counts too: a GC plumbed to its own cylinders needs no gas tap.
 
+### Inside fume hoods and other enclosures
+
+Give a fume hood (or a biosafety cabinet, glovebox, oven...) its working space: `inner_w`, `inner_d`, `inner_h` and
+`inner_z` (see *Measuring protocol*). The space is taken to be centred left to right and flush with the front. Then
+anything kept in it is a row with `parent` = the hood, `mount = in`, and an `x` and `y` measured inside: from the
+working space's left edge and its back (the rear baffle), as you face the hood. It stands on the work surface.
+
+- It has to fit: inside the working space on the plan, and no taller than `inner_h` less `fit_margin`.
+- Things inside can't overlap each other.
+- In a fume hood, work less than `sash_clearance` (15 cm) behind the sash is a warning: the usual rule for keeping
+  fumes inside.
+- The report's *Fume hoods and enclosures* table shows how much of each working space is used, the strip kept clear
+  behind the sash, how much of the volume the things inside take up, and the largest free spot.
+- In the layout, the working space is a dashed outline inside the hood. Drop something inside it and `pull` puts it
+  `in` the hood; drag it out onto a bench and it's `on` the bench again.
+- A drawer or cabinet shelf (`mount = in` with no `x` and `y`) works as before: no position, just contents.
+
 ### Containers
 
 Drawers, cabinet shelves and boxes are ordinary placeables. For `mount = in`, enter the **internal** usable size.
@@ -379,15 +399,16 @@ The checks treat an expired form as a problem, and one that isn't approved, or e
 ## The example
 
 `example/` is a complete, fictional two-room lab: a 720 × 540 cm wet lab (`LAB-A`) and an L-shaped instrument room
-with a chamfered corner, a column and a pilaster (`LAB-B`). It has 115 placeables, 43 pieces of equipment, sockets,
-circuits, links, 50 items, SOPs and placeholder photos, covering every case in this README.
+with a chamfered corner, a column and a pilaster (`LAB-B`). It has 116 placeables, 44 pieces of equipment, sockets,
+circuits, links, 51 items, SOPs and placeholder photos, covering every case in this README.
 
-It also contains **exactly fourteen deliberate problems and five deliberate warnings**, each testing a different
+It also contains **exactly fourteen deliberate problems and seven deliberate warnings**, each testing a different
 rule. The problems: a blocked clear zone, a lid hitting a shelf, an overlap, a fridge too tall for the space under
 a bench, an object outside the room, a cabinet too close to the sprinklers, too many plugs on a socket, a strip plugged into a strip, an overloaded socket, an overloaded circuit, a critical freezer on a shared
 circuit, too much heat for the cooling, a USB run that's too long, and an exhaust point out of reach. The warnings:
-a pending COSHH form, a spare part out of stock, one running low, a vacuum pump next to a balance, and a glovebox
-too big for the door. `example/README.md` lists each one with the exact expected finding, and the rules behind them.
+a pending COSHH form, a spare part out of stock, one running low, a vacuum pump next to a balance, a glovebox
+too big for the door, a hotplate too close to a fume hood's sash, and a spare part still listed for an oven that's
+been decommissioned. `example/README.md` lists each one with the exact expected finding, and the rules behind them.
 
 ## Running the checks
 
@@ -400,7 +421,7 @@ python -m labmap check --open      # ...and open the report in the browser
 ```
 
 Or double-click `check.bat`. The report goes to `build/report.html` (`example/build/report.html` for the example):
-the problems grouped by rule, then progress, rooms, bench space, power, connections, documents, spare parts, triage, workflow groups,
+the problems grouped by rule, then progress, rooms, bench space, fume hoods, power, connections, documents, spare parts, triage, decommissioning, workflow groups,
 containers and what isn't placed yet. Findings are **problems** (something's wrong) or **warnings** (worth a look:
 covered windows, stacks on things not marked stackable, forms not approved or about to expire, spare parts
 out of stock or running low, things closer than `keep_apart` suggests, arrivals too big for the door). It's fine
@@ -411,10 +432,11 @@ The thresholds are on the **`settings` sheet** of `lab-data.xlsx`: walkway width
 must be to a path (30 cm), clear-zone height (200 cm), what counts as in the way (anything starting below
 150 cm), circuit limit (80%), heavy load (1000 W), the raster size (5 cm), `fit_margin` (2 cm of slack for
 measuring error and ventilation, under benches, below the ceiling and through doors), `door_gap` (10 cm),
-`utility_reach` (3 m) and `sprinkler_clearance` (45 cm). Change them to match your safety office's numbers.
+`utility_reach` (3 m), `sprinkler_clearance` (45 cm) and `sash_clearance` (15 cm). Change them to match your
+safety office's numbers.
 
 `python -m unittest discover -s tests -t .` confirms the example still produces exactly its fourteen problems and
-five warnings.
+seven warnings.
 
 ## Rearranging in Inkscape
 
@@ -467,6 +489,40 @@ before and after. `pull` when you're happy; it saves the move list as a printabl
   time, and `pull --dry-run` shows the changes without writing them. Afterwards the drawing is redrawn to match:
   in Inkscape, *File › Revert* to load the new version.
 - `layout` won't overwrite a drawing with moves you haven't pulled yet. `layout --force` throws them away.
+
+## Decommissioning equipment or furniture
+
+Something leaving the lab goes through four steps. Nothing is deleted: the row stays as a record.
+
+**1. Decide.** Set `plan = dispose` on the equipment sheet (for furniture, which has no equipment row, just go to
+step 2 when it's decided). It stays on the maps and in every check. The report's *Triage* table shows how much bench
+or floor space removing it frees, and its *Decommissioning* section starts the to-do list: everything still
+pointing at it.
+
+**2. Try the lab without it.** In `labs.svg`, drag it into its room's *not placed yet* area and run
+`try-layout.bat`: things waiting there are left out of the placement checks, so the comparison shows what removing
+it gains. `pull` clears its `x` and `y` if you keep that.
+
+**3. Empty it and unhook it** before it physically leaves. The *Decommissioning* section of the report lists what's
+left for each thing marked `dispose`:
+
+- **Items in its drawers or on its shelves:** give them a new `container`, or delete the rows.
+- **Things standing on, under or in it:** move them in the layout; `pull` re-parents them.
+- **Sockets on its service spine:** give them a new `parent`, or delete them.
+- **Links** (cables and tubing to or from it): delete the rows.
+- **Documents** (COSHH, calibration): take its ID out of `applies_to`.
+- **Spare parts:** take its ID out of `spare_for`; delete spares that only fit it.
+- **SOPs:** rename the file with a leading `_` (e.g. `_SPEC-02-operation.md`): it's kept, but the directory skips it.
+- **Photos:** move them out of `photos/`.
+
+When the list says *nothing: ready to go*, it's clean.
+
+**4. When it's gone,** put the date in the placeables sheet's `decommissioned` column (or set `plan =
+decommissioned` on the equipment sheet). Don't delete the rows: they're the record of what it was, its asset tag
+and serial, and when it left. From then on it's out of the maps, the checks, the layout, the room lists and the
+search, and its drawers and parts go with it. Its directory page stays, marked *Decommissioned on ...*, so old
+links still work. Anything still pointing at it is a **warning** (*Still pointing at something decommissioned*),
+so nothing is left behind. **Never reuse its ID.**
 
 ## The lab directory
 

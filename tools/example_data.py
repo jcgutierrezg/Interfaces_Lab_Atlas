@@ -1,5 +1,7 @@
 """Worked example, whole cm: LAB-A (720 x 540 wet lab) and LAB-B (L-shaped instrument room with a chamfered
 corner). It holds exactly the deliberate problems listed in example/README.md, one per check."""
+from datetime import date
+
 from example_helpers import D, P
 from example_lab_b import LAB_B
 from example_equipment import EQUIPMENT
@@ -122,9 +124,11 @@ PLACEABLES = LAB_A + LAB_B + [
       notes="EXAMPLE WARNING: 105 cm deep, too big for a 100 cm door even on its side"),
     P("DUCT-01", "Ventilation duct", "overhead", "LAB-B", None, "wall", x=100, y=0, z=240, w=300, d=40, h=30,
       fixed="yes", notes="overhead things are wall mounts with z = their underside"),
+    P("OVEN-01", "Drying oven", "instrument", "LAB-A", None, "floor", w=60, d=55, h=80,
+      decommissioned=date(2026, 6, 30), notes="EXAMPLE: decommissioned, kept as a record"),
 ]
 
-# Doors, tags, sprinklers, services needed: added on top of the rows above, by ID.
+# Doors, tags, sprinklers, services needed, the inside of the fume hood: added on top of the rows above, by ID.
 _MORE_ROOMS = {
     "LAB-A": dict(sprinklers="yes"),
     "LAB-B": dict(sprinklers="yes"),
@@ -138,6 +142,9 @@ _MORE_PLACEABLES = {
     "BAL-01": dict(tags="vibration-sensitive"), "BAL-02": dict(tags="vibration-sensitive"),
     "MIC-01": dict(tags="vibration-sensitive"),
     "AUTO-01": dict(tags="heat-source"),
+    "HOOD-01": dict(inner_w=130, inner_d=65, inner_h=110, inner_z=90),
+    "HP-01": dict(x=15, y=15),
+    "HP-02": dict(x=60, y=30, notes="EXAMPLE WARNING: 5 cm from the sash"),
 }
 _MORE_EQUIPMENT = {
     "MS-01": dict(needs="exhaust"), "GC-01": dict(needs="gas:He; gas:H2"), "PC-02": dict(needs="network"),
@@ -160,6 +167,9 @@ _merge(EQUIPMENT, _MORE_EQUIPMENT)
 _merge(SERVICES, _MORE_SERVICES)
 SERVICES.append(dict(id="EXH-01", type="exhaust", room="LAB-B", x=100, y=0, z=200,
                      medium="snorkel", notes="the only extraction point in LAB-B"))
+EQUIPMENT.append(dict(id="OVEN-01", maker="ExampleCo", model="Dry-60", asset_tag="000456100", owner="Prep group",
+                      condition="broken", plan="decommissioned", plugs=1, plug_type="standard", watts_typ=1200,
+                      notes="left 2026-06-30, collected by the WEEE contractor"))
 EQUIPMENT.append(dict(id="GB-01", maker="ExampleCo", model="Glove-2", owner="Analytics group", plan="new", plugs=1,
                       plug_type="standard", watts_typ=300, watts_max=600, volts=230, weight=250))
 

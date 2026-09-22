@@ -22,11 +22,13 @@ EXAMPLE = {  # example/README.md: the fourteen deliberate problems
     ("sprinkler", ("CAB-01", "LAB-A")),
     ("utility", ("MS-01", "EXH-01")),
     ("socket-load", ("OUT-06",)),
-    ("document-unapproved", ("COSHH-022",)),  # the five deliberate warnings
+    ("document-unapproved", ("COSHH-022",)),  # the seven deliberate warnings
     ("spare-out", ("I-0036",)),
     ("spare-low", ("I-0031",)),
     ("keep-apart-near", ("PUMP-01", "BAL-01")),
     ("door-fit", ("GB-01", "DOOR-02")),
+    ("sash", ("HP-02", "HOOD-01")),
+    ("left-behind", ("I-0051", "OVEN-01")),
 }
 
 
@@ -195,6 +197,33 @@ class BeforeMeasuring(unittest.TestCase):
         self.assertEqual(res.socket_load["W1"], 3500)  # the wall socket carries the strip's load too
         self.assertNotIn(("socket-load", ("W1",)), f)  # 16 A × 230 V = 3680 W: enough
 
+    def test_inside_a_fume_hood(self):
+        from labmap import metrics
+
+        hood = P("H", x=100, y=0, w=150, d=90, h=240, category="fume-hood", fixed="yes",
+                 inner_w=130, inner_d=60, inner_h=100, inner_z=90)
+        rows = [hood,
+                P("OK", "in", "H", category="instrument", x=10, y=5, w=30, d=30, h=40),
+                P("TALL", "in", "H", category="instrument", x=50, y=5, w=20, d=20, h=99),
+                P("FRONT", "in", "H", category="instrument", x=80, y=30, w=20, d=25, h=10),
+                P("OUT", "in", "H", category="instrument", x=120, y=5, w=20, d=20, h=10),
+                P("DRAWER", "in", "B", category="drawer", w=40, d=50, h=10),
+                P("B", x=0, y=200, w=100, d=60, h=90)]
+        res = checks.run(lab_from(rows))
+        f = {(x.rule, x.ids) for x in res.findings}
+        g = res.geo["OK"]  # inside: 10 cm in from the working space's left (hood x + 10), 5 cm from its back (90 - 60 + 5)
+        self.assertEqual((round(min(p[0] for p in g.poly)), round(min(p[1] for p in g.poly)), g.z[0]), (120, 35, 90))
+        self.assertIn(("in-fit", ("TALL", "H")), f)  # 99 + 2 cm margin > 100
+        self.assertIn(("sash", ("FRONT", "H")), f)  # its front edge is 5 cm behind the sash
+        self.assertIn(("off-parent", ("OUT", "H")), f)  # 120 + 20 > 130 wide
+        self.assertNotIn("OK", {i for _, ids in f for i in ids})
+        self.assertIsNone(res.geo.get("DRAWER"))  # an ordinary drawer still has no position
+        e = metrics.enclosures(res)[0]
+        self.assertEqual((e["id"], e["items"]), ("H", 4))
+        self.assertGreater(e["kept"], 0)  # the strip behind the sash
+        lab = lab_from([dict(hood, inner_w=None), P("X", "in", "H", category="instrument", x=0, y=0, w=10, d=10, h=10)])
+        self.assertTrue(any("has no inner_w and inner_d" in i.message for i in lab.issues))
+
     def test_door_fit(self):
         rows = [P("DOOR", x=100, y=295, faces="N", w=90, d=5, h=210, category="door"),
                 P("BIG", w=150, d=95, h=190, category="instrument"), P("OK", w=150, d=85, h=190, category="instrument")]
@@ -202,6 +231,33 @@ class BeforeMeasuring(unittest.TestCase):
         f = found(lab_from(rows, equipment=eq))
         self.assertIn(("door-fit", ("BIG", "DOOR")), f)
         self.assertNotIn(("door-fit", ("OK", "DOOR")), f)  # 85 + 2 cm margin fits a 90 cm door
+
+
+class Decommissioning(unittest.TestCase):
+    def test_gone_but_not_forgotten(self):
+        from labmap import metrics
+
+        rows = [P("B", x=0, y=0, w=200, d=60, h=90, decommissioned="2026-06-30"),
+                P("B.D1", "in", "B", category="drawer", w=40, d=50, h=10),
+                P("X", "on", "B", category="instrument", x=10, y=10, w=30, d=30, h=20),
+                P("PED", x=250, y=0, w=40, d=50, h=70, category="pedestal"),
+                P("OLD", x=100, y=200, w=50, d=50, h=50, category="instrument")]
+        lab = lab_from(rows, equipment=[dict(id="OLD", plan="decommissioned"), dict(id="PED", plan="dispose")],
+                       items=[dict(id="I-1", name="tape", container="B.D1"), dict(id="I-2", name="fuse", container="PED", spare_for="OLD")],
+                       documents=[dict(id="RA-1", type="risk-assessment", applies_to="OLD", status="approved")],
+                       services=[dict(id="S1", type="outlet", room="R", parent="B", x=0, y=0)])
+        self.assertEqual(lab.gone, {"B", "B.D1", "OLD"})  # the drawer goes with its bench
+        self.assertEqual(lab.issues, [])  # still on the sheet: nothing points at a missing ID
+        res = checks.run(lab)
+        self.assertIsNone(res.geo["B"])  # off the maps and out of the checks
+        self.assertIsNone(res.geo["X"])  # what stood on it is waiting for a new place
+        f = {(x.rule, x.ids) for x in res.findings if x.rule == "left-behind"}
+        self.assertEqual(f, {("left-behind", ("X", "B")), ("left-behind", ("I-1", "B")), ("left-behind", ("S1", "B")),
+                             ("left-behind", ("I-2", "OLD")), ("left-behind", ("RA-1", "OLD"))})
+        self.assertEqual(checks.RULES["left-behind"][2], "warning")
+        plan = {d["id"]: (d["status"], len(d["todo"])) for d in metrics.decommissioning(res)}
+        self.assertEqual(plan, {"PED": ("to go", 1), "B": ("gone since 2026-06-30", 3), "OLD": ("gone", 2)})  # PED: empty it first
+        self.assertNotIn("B", [u[0] for u in metrics.unplaced(res)])
 
 
 class Documents(unittest.TestCase):

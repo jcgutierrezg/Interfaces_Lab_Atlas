@@ -47,6 +47,10 @@ PLACEABLES = [
     col("d", "cm, front-back", "Depth front to back. Circle: same as w. Drawers/shelves: internal usable depth.", False, "int", 8),
     col("h", "cm", "Height. Drawers/shelves: internal usable height. Workspace: headroom needed above the bench.", False, "int", 8),
     col("free_under", "cm clear below", "Tables, desks and open-frame benches: clear height underneath, from the floor to the underside of the top or its rail. Anything up to that height can go under it. Blank = solid to the floor (cupboard base, instrument).", False, "int", 9),
+    col("inner_w", "cm, inside", "Fume hoods, biosafety cabinets, gloveboxes, ovens: the working space inside, width along the front. Assumed centred left to right and flush with the front (the sash). Things can then be placed in it (mount = in, with x and y).", False, "int", 8),
+    col("inner_d", "cm, inside", "Working space inside, front to back: from the sash to the rear baffle.", False, "int", 8),
+    col("inner_h", "cm, inside", "Working space inside, height above the work surface (up to the sash opening, for a fume hood).", False, "int", 8),
+    col("inner_z", "cm, work surface", "Height of the inside work surface above the floor (above the object's underside), cm.", False, "int", 8),
     col("clear_front", "cm", "Must stay free in front: standing room, drawer pull-out, door swing. Applies in the plane it sits in: bench surface for things on a bench, floor for things on the floor.", False, "int", 8),
     col("clear_back", "cm", "Behind: ventilation, cables, hoses.", False, "int", 8),
     col("clear_left", "cm, your left", "To your left as you face the front: hinge side, vents, access panels.", False, "int", 8),
@@ -58,6 +62,7 @@ PLACEABLES = [
     col("stackable", "things on top?", "May other things sit on top? Blank = category default (bench, desk, table, shelf, cabinet, cart: yes; the rest: no).", False, "list:yesno", 9),
     col("fill", "% full", "Containers only (drawer, shelf, cabinet, box): how full, 0-100, eyeballed. Finds consolidation opportunities.", False, "pct", 7),
     col("checked", "date", "Containers: date the contents were last verified against the items sheet. Shown in the directory.", False, "date", 11),
+    col("decommissioned", "date it left", "Filled = it's gone. The row stays as a record (with its equipment row: asset tag, serial), but it's left out of the maps, the checks, the layout and the search. Its drawers and parts go with it. Anything still pointing at it is flagged, so nothing is left behind. Never reuse the ID.", False, "date", 12),
     col("tags", "tags; separated; by ;", "What it is or does, for the keep_apart sheet: e.g. vibrates, vibration-sensitive, heat-source, flammable. Anything tagged there is kept at the distance it sets.", False, "text", 18),
     col("notes", "", "", False, "text", 40),
 ]

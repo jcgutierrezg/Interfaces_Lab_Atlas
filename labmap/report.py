@@ -206,8 +206,8 @@ def write(res, path, banner=None, before=None, moves=None):
     if data:
         chips.append(f"<span class='chip bad'>{len(data)} data problem{'' if len(data) == 1 else 's'}</span>")
     out.append("<div class='chips'>" + "".join(chips) + "</div>")
-    sections = ["Problems", "Warnings", "Progress", "Rooms", "Bench space", "Power", "Connections", "Documents",
-                "Spare parts", "Triage", "Workflow groups", "Containers", "Not placed yet"]
+    sections = ["Problems", "Warnings", "Progress", "Rooms", "Bench space", "Fume hoods", "Power", "Connections", "Documents",
+                "Spare parts", "Triage", "Decommissioning", "Workflow groups", "Containers", "Not placed yet"]
     if before is not None:
         sections = ["Compared", "Move list"] + sections
     out.append("<nav>" + "".join(f"<a href='#{s.lower().replace(' ', '-')}'>{s}</a>" for s in sections) + "</nav>")
@@ -253,6 +253,15 @@ def write(res, path, banner=None, before=None, moves=None):
     out.append(table(["Surface", "Room", "#Area m²", "#Used", "#Reserved", "#Free", "", "#Largest free (cm)", "#Things"],
                      [(s["id"], s["room"], s["area"], pct(s["used"]), pct(s["kept"]), pct(s["free"]), bar(s["used"] + s["kept"]),
                        f"{s['largest'][0]} × {s['largest'][1]}", s["items"]) for s in metrics.surfaces(res)]))
+
+    out.append("<h2 id='fume-hoods'>Fume hoods and enclosures</h2><p class='note'>The working space inside "
+               "(inner_w × inner_d × inner_h). Used = things placed in it; kept clear = the strip behind a fume "
+               "hood's sash; volume = how much of the space the things inside take up.</p>")
+    out.append(table(["Enclosure", "Name", "Room", "#Inside m²", "#Used", "#Kept clear", "#Free", "#Volume used",
+                      "Largest free spot, cm", "#Items"],
+                     [(e["id"], e["name"], e["room"], round(e["area"], 2), pct(e["used"]), pct(e["kept"]),
+                       pct(e["free"]), pct(e["volume"]), f"{e['largest'][0]} × {e['largest'][1]}", e["items"])
+                      for e in metrics.enclosures(res)]))
 
     out.append("<h2 id='power'>Power</h2><h3>Circuits</h3>")
     rows = []
@@ -314,6 +323,16 @@ def write(res, path, banner=None, before=None, moves=None):
     out.append(table(["Equipment", "Name", "Room", "Plan", "Usage", "Condition", "#Frees m²"],
                      [(t["id"], t["name"], t["room"], t["plan"], t["usage"], t["condition"],
                        f"{t['area']:.2f} ({t['where']})" if t["area"] else "") for t in metrics.triage(res)]))
+
+    out.append("<h2 id='decommissioning'>Decommissioning</h2><p class='note'>Equipment with plan = dispose (to go) "
+               "and anything decommissioned (gone: a date in the decommissioned column, or plan = decommissioned). "
+               "The last column is what still points at it: before it goes, the to-do list; after, what was left "
+               "behind. Gone things stay as records, out of the maps and checks.</p>")
+    out.append(table(["Object", "Name", "Room", "Status", "Asset tag", "Still pointing at it"],
+                     [(d["id"], d["name"], d["room"], d["status"], d["asset"] or "",
+                       ("html", "<br>".join(esc(t) for t in d["todo"]) or
+                        ("<span class='ok'>nothing: ready to go</span>" if d["status"] == "to go"
+                         else "<span class='ok'>nothing left</span>"))) for d in metrics.decommissioning(res)]))
 
     out.append("<h2 id='workflow-groups'>Workflow groups</h2><p class='note'>Equipment tagged with the same workflow "
                "should stay close together. Spread is the largest distance between two members.</p>")

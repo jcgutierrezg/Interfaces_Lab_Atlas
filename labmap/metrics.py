@@ -67,6 +67,67 @@ def surfaces(res):
     return sorted(out, key=lambda s: (s["room"] or "", s["id"]))
 
 
+def enclosures(res):
+    """Fume hoods and other enclosures with a working space: how much of it is used, kept clear and free."""
+    lab, geo, P = res.lab, res.geo, res.lab.placeables
+    out = []
+    for i, r in P.items():
+        inner = G.interior(lab, i)
+        if not inner or not geo.get(i) or not geo[i].poly:
+            continue
+        u0, v0, iw, idp, ih, _ = inner
+        step = lab.settings["grid"]
+        nx, ny = max(1, round(iw / step)), max(1, round(idp / step))
+        used = [[False] * nx for _ in range(ny)]
+        kept = [[False] * nx for _ in range(ny)]
+        vol, items = 0.0, 0
+        for c in lab.children.get(i, []):
+            cr = P[c]
+            if cr.get("mount") != "in" or cr.get("x") is None:
+                continue
+            got = G.in_frame(lab, c, cr, (0.0, 0.0), 0, [])  # c's own x, y are measured inside already
+            if not got:
+                continue
+            items += 1
+            local, _, T, _ = got
+            pts = [T(u, v) for u, v in local]
+            _grid_mark(used, pts, iw, idp)
+            vol += abs(G.area(pts)) * (cr.get("h") or 0)
+        if r.get("category") == "fume-hood":
+            sash = lab.settings["sash_clearance"]
+            _grid_mark(kept, [(0, idp - sash), (iw, idp - sash), (iw, idp), (0, idp)], iw, idp)
+        total = nx * ny
+        n_used = sum(u for row in used for u in row)
+        n_kept = sum(k and not u for kr, ur in zip(kept, used) for k, u in zip(kr, ur))
+        free = [[not u and not k for u, k in zip(ur, kr)] for ur, kr in zip(used, kept)]
+        cols, rows = G.largest_rectangle(free)
+        out.append(dict(id=i, room=r.get("room"), name=r.get("name"), area=iw * idp / 1e4,
+                        used=n_used / total, kept=n_kept / total, free=(total - n_used - n_kept) / total,
+                        volume=vol / (iw * idp * ih) if ih else None,
+                        largest=(round(cols * iw / nx), round(rows * idp / ny)), items=items))
+    return sorted(out, key=lambda s: (s["room"] or "", s["id"]))
+
+
+def decommissioning(res):
+    """What's being decommissioned (plan = dispose) and what's gone, with everything still pointing at each."""
+    from .checks import references
+
+    lab, P = res.lab, res.lab.placeables
+    out = []
+    for i, r in P.items():
+        e = lab.equipment.get(i, {})
+        if i in lab.decommissioned:
+            when = lab.decommissioned[i]
+            status = f"gone since {when}" if when else "gone"
+        elif e.get("plan") == "dispose":
+            status = "to go"
+        else:
+            continue
+        out.append(dict(id=i, name=r.get("name"), room=r.get("room"), status=status, asset=e.get("asset_tag"),
+                        serial=e.get("serial"), todo=[what for _, _, what in references(lab, i)]))
+    return sorted(out, key=lambda d: (d["status"] != "to go", d["room"] or "", d["id"]))
+
+
 def rooms(res):
     lab, geo, P = res.lab, res.geo, res.lab.placeables
     out = []
@@ -79,7 +140,7 @@ def rooms(res):
         area = abs(G.area(poly)) if poly else None
         out.append(dict(id=rid, name=room.get("name"), area=area / 1e4 if area else None,
                         covered=floor / area if area else None, heat=res.heat.get(rid, 0), cooling=room.get("cooling"),
-                        objects=sum(1 for r in P.values() if r.get("room") == rid),
+                        objects=sum(1 for i, r in P.items() if r.get("room") == rid and i not in lab.gone),
                         walk=res.walk_notes.get(rid)))
     return out
 
@@ -91,6 +152,8 @@ def triage(res):
     for eid, e in lab.equipment.items():
         plan = e.get("plan")
         rare = e.get("usage") in ("yearly", "never")
+        if eid in lab.gone:
+            continue
         if plan in (None, "keep") and not rare:
             continue
         g, where = geo.get(eid), None
@@ -107,7 +170,7 @@ def workflows(res):
     lab, geo = res.lab, res.geo
     groups = defaultdict(list)
     for eid, e in lab.equipment.items():
-        if e.get("workflow"):
+        if e.get("workflow") and eid not in lab.gone:
             groups[e["workflow"]].append(eid)
     out = []
     for tag, ids in sorted(groups.items()):
@@ -129,6 +192,8 @@ def containers(res):
         count[it.get("container")] += 1
     out = []
     for i, r in P.items():
+        if i in lab.gone:
+            continue
         if r.get("category") in CONTAINERS or count.get(i):
             out.append(dict(id=i, name=r.get("name"), where=location(lab, i), fill=r.get("fill"),
                             checked=r.get("checked"), items=count.get(i, 0)))
@@ -136,7 +201,9 @@ def containers(res):
 
 
 def completeness(res):
-    lab, geo, P, E, S = res.lab, res.geo, res.lab.placeables, res.lab.equipment, res.lab.services
+    lab, geo, S = res.lab, res.geo, res.lab.services
+    P = {i: r for i, r in lab.placeables.items() if i not in lab.gone}
+    E = {i: e for i, e in lab.equipment.items() if i not in lab.gone}
     solid = [r for r in P.values() if r.get("shape") != "group"]
     placeable = [i for i, r in P.items() if r.get("mount") not in ("in", None) and r.get("shape") != "group"]
     powered = [e for e in E.values() if e.get("plug_type") not in ("hardwired", "none")]
@@ -156,5 +223,5 @@ def completeness(res):
 def unplaced(res):
     lab, geo, P = res.lab, res.geo, res.lab.placeables
     return [(i, r.get("name"), r.get("room")) for i, r in P.items()
-            if r.get("mount") in ("floor", "wall", "part") and r.get("shape") != "group"
+            if r.get("mount") in ("floor", "wall", "part") and r.get("shape") != "group" and i not in lab.gone
             and (r.get("x") is None or r.get("y") is None)]

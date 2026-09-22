@@ -15,12 +15,12 @@ from . import svg
 
 SHEETS = ("rooms", "placeables", "equipment", "services", "circuits", "links", "items", "documents", "keep_apart")
 ID_SHEETS = ("rooms", "placeables", "equipment", "services", "circuits", "items", "documents")
-DATES = {("placeables", "checked"), ("documents", "filled"), ("documents", "expires")}
+DATES = {("placeables", "checked"), ("placeables", "decommissioned"), ("documents", "filled"), ("documents", "expires")}
 ID_COLUMNS = {"id", "room", "parent", "outlet", "circuit", "fed_by", "container", "from", "to"}
 NUMERIC = {
     "rooms": {"width", "depth", "ceiling", "cooling"},
     "placeables": {"x", "y", "z", "w", "d", "h", "free_under", "clear_front", "clear_back", "clear_left",
-                   "clear_right", "clear_top", "fill"},
+                   "clear_right", "clear_top", "fill", "inner_w", "inner_d", "inner_h", "inner_z"},
     "equipment": {"plugs", "watts_typ", "watts_max", "volts", "weight"},
     "services": {"x", "y", "z", "sockets", "rating_a"},
     "circuits": {"rating_a", "volts", "phase"},
@@ -65,7 +65,7 @@ FALLBACK_LINK_LEN = {"usb": 500, "usb3": 300, "ethernet": 10000, "serial": 1500,
 SETTINGS = {  # the settings sheet can change these
     "walkway_width": 60, "reach": 30, "person_height": 200, "blocks_walking_below": 150,
     "circuit_limit": 80, "heavy_load": 1000, "grid": 5, "expiry_warning_days": 30,
-    "fit_margin": 2, "door_gap": 10, "utility_reach": 300, "sprinkler_clearance": 45,
+    "fit_margin": 2, "door_gap": 10, "utility_reach": 300, "sprinkler_clearance": 45, "sash_clearance": 15,
 }
 
 
@@ -89,6 +89,8 @@ class Lab:
     items: dict = field(default_factory=dict)
     documents: dict = field(default_factory=dict)
     keep_apart: list = field(default_factory=list)
+    decommissioned: dict = field(default_factory=dict)  # id -> date it left (None if only plan = decommissioned)
+    gone: set = field(default_factory=set)  # decommissioned, with their drawers and parts
     lists: dict = field(default_factory=dict)
     settings: dict = field(default_factory=lambda: dict(SETTINGS))
     issues: list = field(default_factory=list)
@@ -414,6 +416,7 @@ def build(folder, rows, lists=None, room_polys=None, settings=None):
         for i in it.get("spare_for") or []:
             if i not in lab.placeables:
                 lab.issue(f"{it['id']}: spare_for {i} isn't on the placeables sheet", [it["id"]])
+    _decommissioned(lab)
     _check_placeables(lab)
     _check_services(lab)
     _attach_rooms(lab, room_polys)
@@ -441,6 +444,24 @@ def order_links(item):
     return out
 
 
+def _decommissioned(lab):
+    """Which rows are gone: a decommissioned date on the placeables sheet, or plan = decommissioned. What's part of
+    them (drawers, cabinet shelves, the pieces of a composed bench) goes with them."""
+    P = lab.placeables
+    for i, r in P.items():
+        if r.get("decommissioned") or lab.equipment.get(i, {}).get("plan") == "decommissioned":
+            lab.decommissioned[i] = r.get("decommissioned")
+    lab.gone = set(lab.decommissioned)
+    grew = True
+    while grew:
+        grew = False
+        for i, r in P.items():
+            if i not in lab.gone and r.get("parent") in lab.gone and (
+                    r.get("mount") == "part" or (r.get("mount") == "in" and r.get("x") is None)):
+                lab.gone.add(i)
+                grew = True
+
+
 def _check_placeables(lab):
     P = lab.placeables
     for i, r in P.items():
@@ -453,6 +474,9 @@ def _check_placeables(lab):
         if mount in ("floor", "wall") and parent:
             lab.issue(f"{i} has parent {parent} but mount '{mount}': use on, under, in or part, or clear the parent",
                       [i], r.get("room"))
+        if mount == "in" and r.get("x") is not None and pr and not (pr.get("inner_w") and pr.get("inner_d")):
+            lab.issue(f"{i} is placed inside {parent}, but {parent} has no inner_w and inner_d (its working space)",
+                      [i, parent], r.get("room"))
         if mount == "part" and pr and pr.get("shape") != "group":
             lab.issue(f"{i} is a 'part' but its parent {parent} isn't shape = group", [i], r.get("room"))
         if r.get("shape") == "group" and (parent or mount != "floor"):

@@ -175,7 +175,13 @@ def local_transform(lab, i):
     if pts is None or r.get("x") is None or r.get("y") is None:
         return None
     rp = [G.rot(rel, u, v) for u, v in pts]
-    return (r["x"] - min(p[0] for p in rp), r["y"] - min(p[1] for p in rp)), rel
+    x, y = r["x"], r["y"]
+    if r.get("mount") == "in":  # measured inside the parent's working space
+        inner = G.interior(lab, r.get("parent"))
+        if inner is None:
+            return None
+        x, y = x + inner[0], y + inner[1]
+    return (x - min(p[0] for p in rp), y - min(p[1] for p in rp)), rel
 
 
 # --- drawing ----------------------------------------------------------------------------------------------
@@ -253,7 +259,7 @@ def layout_layer(lab, res, i):
     r = lab.placeables[i]
     if r.get("mount") == "wall" or level_of(lab, res, i) == "wall":
         return "wall"
-    return r.get("mount") if r.get("mount") in ("on", "under") else "floor"
+    return "on" if r.get("mount") == "in" else r.get("mount") if r.get("mount") in ("on", "under") else "floor"
 
 
 def label_want(lab, i, w, d):
@@ -411,6 +417,11 @@ def _object(lab, i, origin, angle, abs_angle, flagged, unplaced=False, sizes=Non
     op = ' fill-opacity="0.35"' if overhead else f' fill-opacity="{STACK_FILL}"' if st and st[0] > 0 else ""
     out.append(f'<polygon class="fp" points="{_pts(local)}" fill="{fill}"{op} stroke="{stroke}" '
                f'stroke-width="{width}"{dash}/>')
+    inner = G.interior(lab, i)
+    if inner:  # the working space inside a fume hood: a dashed outline
+        u0, v0, iw, idp = inner[:4]
+        out.append(f'<rect class="inner" x="{_n(u0)}" y="{_n(v0)}" width="{_n(iw)}" height="{_n(idp)}" fill="#f8fafc" '
+                   f'stroke="#555555" stroke-width="0.8" stroke-dasharray="4 2"/>')
     color = alert if i in flagged else "#6b6b6b" if under else "#222222"
     want, carries, slot = label_want(lab, i, w, d)
     late = carries or st is not None  # drawn after what stands on it, so that doesn't cover it
@@ -432,11 +443,13 @@ def _object(lab, i, origin, angle, abs_angle, flagged, unplaced=False, sizes=Non
     label = text(plan, "lb-all") + (text(lsizes.get(i, (0, None, None)), "lb-level") if lsizes else "")
     if not late:
         out.append(label)
-    for mount in ("under", "on") if nest else ():
+    for mount in ("under", "in", "on") if nest else ():
         for c in kids:
             if P[c].get("mount") != mount:
                 continue
             lt = local_transform(lab, c)
+            if mount == "in" and not lt:
+                continue  # a drawer, or not placed inside yet
             if lt:
                 out.append(_object(lab, c, lt[0], lt[1], abs_angle + lt[1], flagged, sizes=sizes, lsizes=lsizes, levels=levels))
             elif outline(lab, c):  # not placed yet: wait beside the parent, in its frame
@@ -579,7 +592,7 @@ def abs_matrix(lab, i):
     t = math.radians(a)
     m = (math.cos(t), math.sin(t), -math.sin(t), math.cos(t), ox, oy)
     parent = P[i].get("parent")
-    if parent and P[i].get("mount") in ("on", "under", "part"):
+    if parent and P[i].get("mount") in ("on", "under", "part", "in"):
         pm = abs_matrix(lab, parent) if parent in P else None
         return None if pm is None else svg.mul(pm, m)
     return m
@@ -617,7 +630,8 @@ def _block(lab, rid):
     P = lab.placeables
     poly = _room_poly(lab.rooms[rid])
     x0, y0, x1, y1 = G.bbox(poly)
-    ids = [i for i, r in P.items() if r.get("room") == rid and r.get("mount") in ("floor", "wall", "on", "under")]
+    ids = [i for i, r in P.items() if r.get("room") == rid and i not in lab.gone
+           and (r.get("mount") in ("floor", "wall", "on", "under") or (r.get("mount") == "in" and G.interior(lab, r.get("parent"))))]
 
     def order(i):
         r, pts = P[i], outline(lab, i) or [(0, 0)]
@@ -812,7 +826,7 @@ def moves_from(lab, mats, rooms, layers=None):
     frames = {rid: (_inv(r["m"]), _room_poly(lab.rooms[rid])) for rid, r in rooms.items() if rid in lab.rooms}
     stages = {rid: G.bbox([_apply(frames[rid][0], p) for p in r["stage"]])
               for rid, r in rooms.items() if rid in frames and r.get("stage")}
-    ids = [i for i, r in P.items() if r.get("mount") in ("floor", "wall", "on", "under", "part") and i in mats]
+    ids = [i for i, r in P.items() if r.get("mount") in ("floor", "wall", "on", "under", "part", "in") and i in mats]
     ids = [i for i in ids if P[i].get("shape") != "group"] + [i for i in ids if P[i].get("shape") == "group"]
     notes = []
 
@@ -874,6 +888,17 @@ def moves_from(lab, mats, rooms, layers=None):
                     todo.append(c)
         return out
 
+    def enclosure(i, rid, centre):
+        """The fume hood (or other enclosure) whose working space the centre is in, if any."""
+        mine = below(i) | {i}
+        for j in P:
+            if land.get(j) == (rid, False) and j not in mine and G.interior(lab, j) and frame(j) is not None:
+                u0, v0, iw, idp = G.interior(lab, j)[:4]
+                box = [_apply(frame(j), p) for p in ((u0, v0), (u0 + iw, v0), (u0 + iw, v0 + idp), (u0, v0 + idp))]
+                if G.inside(centre, box):
+                    return j
+        return None
+
     def host(i, mount, rid, centre):
         mine = below(i) | {i}
         ok = (lambda r: _carrier(r)) if mount == "on" else (lambda r: r.get("free_under") is not None)
@@ -891,7 +916,9 @@ def moves_from(lab, mats, rooms, layers=None):
         rid, staged = land[i]
         parent, mount = r.get("parent"), r.get("mount")
         target = LAYER_MOUNT.get((layers or {}).get(i))
-        if target and target != mount and mount in ("floor", "wall", "on", "under") and r.get("shape") != "group":
+        if target == "on" and mount == "in":
+            target = None  # things inside a fume hood are drawn on the 'on benches' layer
+        if target and target != mount and mount in ("floor", "wall", "on", "under", "in") and r.get("shape") != "group":
             names = dict(LAYERS)
             notes.append(f"{i} was moved to the '{names[layers[i]]}' layer, so it's mounted '{target}' now"
                          + ("" if target == "floor" else f": {target} whatever it's dropped on"))
@@ -907,7 +934,11 @@ def moves_from(lab, mats, rooms, layers=None):
         if not pts:
             continue
         centre = _apply(m, G.centroid(pts))
-        if mount in ("on", "under"):
+        inside = enclosure(i, rid, centre) if mount in ("on", "in") else None
+        if inside:
+            parent, mount = inside, "in"
+        elif mount in ("on", "under", "in"):
+            mount = "on" if mount == "in" else mount  # taken out of the hood: onto whatever it's over now
             h = host(i, mount, rid, centre)
             if h is None:
                 notes.append(f"{i} isn't {mount} anything any more, so it's standing on the floor now")
@@ -919,6 +950,9 @@ def moves_from(lab, mats, rooms, layers=None):
             base = svg.mul(frames[rid][0], mats[parent]) if mount == "part" and parent in mats else frame(parent)
             if base is None:
                 continue
+            if mount == "in":  # measured inside the working space
+                u0, v0 = G.interior(lab, parent)[:2]
+                base = svg.mul(base, (1, 0, 0, 1, u0, v0))
         a, b, c, d, e, f = svg.mul(_inv(base), m) if parent else m
         ang = math.degrees(math.atan2(b, a)) % 360
         snap = int(round(ang / 45) * 45) % 360

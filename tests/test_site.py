@@ -69,6 +69,13 @@ class Directory(unittest.TestCase):
         self.assertIn("markflash", page)
         self.assertNotIn('class="pin"', (self.tmp / "rooms" / "LAB-A.html").read_text(encoding="utf-8"))
 
+    def test_decommissioned_kept_as_a_record(self):
+        page = (self.tmp / "o" / "OVEN-01.html").read_text(encoding="utf-8")
+        self.assertIn("class='gone'>Decommissioned on 2026-06-30", page)
+        self.assertIn("spare part I-0051", page)  # what still points at it
+        self.assertNotIn('"OVEN-01"', (self.tmp / "search.js").read_text(encoding="utf-8"))  # not searched
+        self.assertNotIn("OVEN-01", (self.tmp / "rooms" / "LAB-A.html").read_text(encoding="utf-8"))
+
     def test_document_links(self):
         self.assertEqual(site.doc_href("\\\\server\\share\\COSHH\\014.pdf"), "file://server/share/COSHH/014.pdf")
         self.assertEqual(site.doc_href("S:\\Safety\\RA-003.pdf"), "file:///S:/Safety/RA-003.pdf")

@@ -12,7 +12,7 @@ illustrative, not validated procedure.
 The `.bat` files in this folder do the same as the ones in the main folder (see *Double-click shortcuts* in
 `../README.md`), but on the example. Double-click them in this order to see the whole workflow:
 
-1. `check.bat`: the report, with the fourteen deliberate problems and five warnings listed below.
+1. `check.bat`: the report, with the fourteen deliberate problems and seven warnings listed below.
 2. `site.bat`: the lab directory. Search for "allen key", open `MIC-01`, try the level and sockets buttons.
 3. `layout.bat`: opens `build\layout`. Open `labs.svg` in Inkscape: both rooms side by side. Drag `SPEC-02`
    onto the central table (`TBL-01`), and the FTIR (`FTIR-01`) from LAB-B onto LAB-A's window bench
@@ -36,9 +36,9 @@ example exactly as shipped.
 | Cooling | 8 kW | 3 kW (deliberately too little) |
 | Sprinklers | yes | yes, and a ventilation duct overhead |
 
-In numbers: 115 rows on the placeables sheet (91 with a position, 18 inside other things, 4 group rows, 2 not
-placed yet), 43 pieces of equipment, 22 sockets, strips, network ports and extraction points, 10 circuits,
-19 links, 50 items, 5 SOPs, 5 forms and certificates on the documents sheet, 4 keep-apart rules and 8 photos.
+In numbers: 116 rows on the placeables sheet (93 with a position, 16 inside other things without one, 4 group
+rows, 2 not placed yet, 1 decommissioned), 44 pieces of equipment, 22 sockets, strips, network ports and extraction
+points, 10 circuits, 19 links, 51 items, 5 SOPs, 5 forms and certificates on the documents sheet, 4 keep-apart rules and 8 photos.
 
 ## Cases covered
 
@@ -53,7 +53,8 @@ placed yet), 43 pieces of equipment, 22 sockets, strips, network ports and extra
 | Sink as an occupant of a bench | `SINK-01` |
 | Tables open underneath (`free_under`), with legroom and a bin under them | `TBL-01` + `BIN-01`; `TBL-02` + `WS-06` + `BIN-02`; `DESK-01` + `WS-02` |
 | Things under benches | `PED-01`–`PED-03`, `FRZ-02`, `FRG-01`, `PUMP-01`, `PUMP-02`, `PC-02`, `SRV-01` |
-| Things inside other things, without a position | drawers `*.D1`–`D3`, cabinet shelves `*.S1`–`S3`, `HP-01`/`HP-02` in the hood |
+| Things inside other things, without a position | drawers `*.D1`–`D3`, cabinet shelves `*.S1`–`S3` |
+| Working space inside a fume hood, with things placed in it | `HOOD-01` (`inner_w` × `inner_d` × `inner_h` = 130 × 65 × 110 cm, work surface at 90 cm); hotplates `HP-01`, `HP-02` (`mount = in`, with x and y) |
 | Wall-mounted: shelf, window, eyewash, panel | `SHELF-01`, `WIN-01`, `EYE-01`, `PANEL-01` |
 | Round objects | `GAS-01`–`GAS-04`, `BIN-01`, `BIN-02` |
 | Fixed things with mandatory clear zones | `DOOR-01`, `DOOR-02`, `EYE-01`, `PANEL-01` |
@@ -63,7 +64,8 @@ placed yet), 43 pieces of equipment, 22 sockets, strips, network ports and extra
 | Services needed besides power | `MS-01` (exhaust: out of reach), `GC-01` (He and H2: met by its gas lines), `PC-02` (network: `NET-03` within reach) |
 | Tags kept apart | `vibrates` on the pumps and centrifuges, `vibration-sensitive` on the balances and the microscope, `heat-source` on the autoclave |
 | Socket and strip ratings | `OUT-06` (10 A), the strips (13 A) |
-| Being thrown out, or undecided | `SPEC-02` (`dispose`), `FTIR-01` (`undecided`) |
+| Being thrown out, or undecided | `SPEC-02` (`dispose`: on the report's Decommissioning list), `FTIR-01` (`undecided`) |
+| Decommissioned, kept as a record | `OVEN-01` (`decommissioned` 2026-06-30, `plan = decommissioned`); a spare part still listed for it |
 | Sockets on bench spines, on the hood, in a floor box | `OUT-02`, `OUT-10`–`OUT-12`; `OUT-05`; `OUT-07` |
 | Explicit socket vs nearest socket | `outlet` filled for most of LAB-B, blank for most of LAB-A |
 | UPS- and generator-backed circuits | `DB3-C02`, `DB2-C09` |
@@ -77,7 +79,7 @@ placed yet), 43 pieces of equipment, 22 sockets, strips, network ports and extra
 
 ## Deliberate problems: the expected check results
 
-The example contains exactly these fourteen problems and five warnings, each testing a different rule. Everything
+The example contains exactly these fourteen problems and seven warnings, each testing a different rule. Everything
 else is meant to pass, so if a check reports anything beyond this list, either the check or the example has a bug.
 
 | # | Rule | Expected finding |
@@ -101,6 +103,8 @@ else is meant to pass, so if a check reports anything beyond this list, either t
 | + | Spare part running low (warning) | `I-0031` guard cartridges for `HPLC-01`: 2 in stock, keep at least 4 |
 | + | Close together (warning) | vacuum pump `PUMP-01` is 75 cm from balance `BAL-01`; the vibration rule asks for 100 cm |
 | + | Won't fit through the door (warning) | the arriving glovebox `GB-01`, 180 × 105 × 190 cm, can't pass LAB-B's 100 cm door even on its side |
+| + | Too close to the sash (warning) | hotplate `HP-02` is 5 cm behind `HOOD-01`'s sash; work is kept at least 15 cm inside |
+| + | Still pointing at something decommissioned (warning) | `I-0051`, the oven door seal, is still a spare for `OVEN-01`, which left on 2026-06-30 |
 
 ## How those results are worked out
 
@@ -130,6 +134,10 @@ unit tests in `tests/` cover that rule, and the others the example doesn't trigg
   `utility_reach` (3 m), measured like a cable run.
 - **Keep apart:** for each row of the `keep_apart` sheet, every object tagged `tag` and every object tagged
   `away_from` in the same room, measured edge to edge on the plan. The row's `level` makes it a problem or a warning.
+- **Inside a fume hood:** things with `mount = in` and an x and y are placed in the hood's working space
+  (`inner_w` × `inner_d`, centred left to right and flush with the front, on a work surface `inner_z` up). They must
+  fit in it, and be no taller than `inner_h` less `fit_margin`; in a fume hood, anything less than
+  `sash_clearance` (15 cm) behind the sash is a warning.
 - **Door fit:** equipment with `plan` new or relocate must pass through a door of its room: its smallest dimension
   plus `fit_margin` within the door's width, and its middle one within the door's height.
 - **Sockets:** each device uses `plugs` sockets at its `outlet`, or, when that's blank, at the nearest socket or
@@ -150,9 +158,14 @@ unit tests in `tests/` cover that rule, and the others the example doesn't trigg
   category other than bench, desk, table, shelf, cabinet or cart). Also forms on the documents sheet that aren't
   approved, or that expire within `expiry_warning_days`; an expired one is a problem. And required spares (`min_qty`
   filled on the items sheet) with none in stock, or fewer than `min_qty`. And keep-apart rows marked `warning`, and
-  arrivals too big for the door. The example has exactly five warnings, on purpose: `COSHH-022` (the LC-MS
-  solvents) is still pending, the GC inlet liners are out, the guard cartridges are low, the vacuum pump is next to
-  the balance, and the glovebox won't get through the door.
+  arrivals too big for the door, work too close to a fume hood's sash, and anything still pointing at something
+  decommissioned. The example has exactly seven warnings, on purpose: `COSHH-022` (the LC-MS solvents) is still
+  pending, the GC inlet liners are out, the guard cartridges are low, the vacuum pump is next to the balance, the
+  glovebox won't get through the door, a hotplate sits right behind the hood's sash, and the old oven's door seal
+  is still listed as its spare.
+- **Decommissioned** things (a `decommissioned` date, or `plan = decommissioned`), with their drawers and parts, are
+  left out of every check, map and count. What still refers to them is listed: things on or in them, items kept in
+  them, spares listed for them, sockets on them, links, documents, SOPs and photos.
 - **Unplaced things** (`INC-01`, `GB-01`) are left out of the placement checks and simply listed; the door check
-  still applies to them.
+  still applies to them. `OVEN-01` has no position either, but it's decommissioned, so it isn't listed.
 - The thresholds (60 cm walkways, 80% circuit limit, 1000 W heavy load, ...) are on the `settings` sheet.

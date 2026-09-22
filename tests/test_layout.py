@@ -178,6 +178,28 @@ class RoundTrip(unittest.TestCase):
         layout.write_layouts(lab, checks.run(lab))
         self.assertEqual(layout.count(self.pull()[1]), 0)  # redrawn on the right layers: nothing left to pull
 
+    def test_into_and_out_of_the_fume_hood(self):
+        hood = self.res.geo["HOOD-01"]
+        from labmap import geometry as G
+
+        inside = G.interior_poly(self.lab, "HOOD-01", hood)
+        cx, cy = G.centroid(inside)
+        m = self.rooms["LAB-A"]["m"]
+        self.edit({**self.drag("SPEC-02", (cx + m[4], cy + m[5] - 10)),  # into the hood's working space
+                   **self.drag("HP-01", self.centre("TBL-01"))})  # a hotplate out onto the table
+        placed, moves, _ = self.pull()
+        self.assertEqual((placed["SPEC-02"]["mount"], placed["SPEC-02"]["parent"]), ("in", "HOOD-01"))
+        self.assertEqual((placed["HP-01"]["mount"], placed["HP-01"]["parent"]), ("on", "TBL-01"))
+        model.write_moves(self.tmp / "lab-data.xlsx", moves, self.tmp / "build" / "backups")
+        lab = model.load(self.tmp)
+        self.assertEqual(lab.issues, [])
+        res = checks.run(lab)
+        sx, sy = G.centroid(res.geo["SPEC-02"].poly)  # where it was dropped: x, y inside the hood came back right
+        self.assertLess(abs(sx - cx) + abs(sy - (cy - 10)), 1.5)
+        self.assertAlmostEqual(res.geo["SPEC-02"].z[0], 90)  # on the hood's work surface
+        layout.write_layouts(lab, res)
+        self.assertEqual(layout.count(self.pull()[1]), 0)  # redrawn inside the hood: nothing left to pull
+
     def test_dropped_outside_every_room(self):
         self.edit(self.drag("BENCH-02", self.doc("LAB-B", 700, 550)))  # LAB-B's missing corner: not a room
         placed, moves, notes = self.pull()
