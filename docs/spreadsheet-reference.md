@@ -60,10 +60,42 @@ included, so you can filter by room.
   relative to the parent, so blank = "same way as the parent", which is almost always right.
 - `w` is always measured **along the front**, `d` from front to back. A bench along the right-hand wall faces `W`,
   so its `w` runs top to bottom on the drawing. That's expected: the scripts do the rotating.
-- For diagonal objects, `x`/`y` is the top-left corner of their **bounding box**, which isn't a physical corner you
-  can measure to. Leave them blank and drag the object into place instead.
-- In irregular rooms, where the left or top wall is out of sight from much of the floor, the same applies:
-  measure sizes, then drag positions in.
+- **Turned diagonally** (`faces` = `NE`, `SE`, `SW` or `NW`), `x`/`y` is still the top-left of the **bounding
+  box**: a point in mid-air off the corner of the object, which you can't put a tape on. Nothing rotates about its
+  centre, so don't look for one. See [Placing something turned diagonally](#placing-something-turned-diagonally).
+- In irregular rooms, where the left or top wall is out of sight from much of the floor, measure sizes, then drag
+  positions in: [Rearranging in Inkscape](rearranging.md).
+
+### Placing something turned diagonally
+
+An object is built in its own frame (origin at its **back-left** corner, as you stand facing its front), turned by
+`faces` about that corner, and then slid so that the top-left of its bounding box lands on `x`, `y`. Square to the
+room that box corner *is* a corner of the object, so `x`, `y` is simply the corner nearest the room's origin. On a
+diagonal it isn't, and the arithmetic is horrible. Let the tool do it: measure any **one corner**, then ask
+
+```
+python -m labmap xy BENCH-11.B 820 25 --corner back-left
+```
+
+and it prints the `x`, `y` to type, in the parent's frame, plus where the other three corners then land and whether
+any of them fall outside the room. Without coordinates it just reports where the corners are now, which is the
+quickest way to see which way round a piece has ended up:
+
+```
+python -m labmap xy BENCH-11.B
+```
+
+`--corner` takes `back-left` (the default), `back-right`, `front-right` or `front-left`, named as you stand in
+front of the object. `--faces`, `--w` and `--d` try a different facing or size without editing the spreadsheet.
+
+Two things to expect on a chamfered corner:
+
+- **45° steps only.** If the wall is at 48°, a rectangle turned `SW` cannot sit flush against it, and the checks
+  will report it as partly outside the room. Draw that piece as a [profile](#shapes) instead: a profile is a
+  polygon, at whatever angle the wall really is, and its row needs no rotation at all.
+- **A group's `x`, `y` pins the bounding box of all its parts together.** Change one part and the box changes, so
+  the whole group shifts. The `xy` command says by how much and what to set the group's `x`, `y` to if you want
+  everything else to stay put.
 
 ## Shapes
 

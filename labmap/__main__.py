@@ -1,4 +1,4 @@
-"""Command line: python -m labmap <check | layout | pull | site> [folder]
+"""Command line: python -m labmap <check | layout | pull | site | xy> [folder]
 
 The folder is the one holding lab-data.xlsx (with rooms/, shapes/, sops/, photos/ beside it). Without one, the
 folder named in labmap.ini (next to this package) is used, e.g. a synced Teams or OneDrive folder; failing that,
@@ -159,6 +159,87 @@ def _pull(args):
     return 0
 
 
+def _xy(args):
+    """Where an object's corners are, and what x, y would put a corner on a spot you measured."""
+    from . import geometry as G
+
+    folder = data_folder(args.folder)
+    over = {k: v for k, v in (("faces", args.faces), ("w", args.w), ("d", args.d)) if v is not None}
+    lab = _load(folder, {"placeables": {args.id: over}} if over else None)
+    if lab is None:
+        return 2
+    if args.id not in lab.placeables:
+        print(f"No row with id {args.id} on the placeables sheet.")
+        return 2
+    r = lab.placeables[args.id]
+    geo = G.place_all(lab)[0]
+    g = geo.get(args.id)
+    if g is None or g.T is None:
+        print(f"{args.id} isn't placed yet: it needs w, d, h, x, y (and its parent placed) before it has corners.")
+        return 2
+    frame = f"in {r['parent']}'s frame" if r.get("parent") else f"in {g.room}"
+    size = f"{r['w']} x {r.get('d') if r.get('d') is not None else r['w']}"
+    print(f"{args.id}  {r.get('name') or ''}  {size} cm, faces {r.get('faces') or 'S'}"
+          + (f", {'part of' if r.get('mount') == 'part' else r.get('mount')} {r['parent']}"
+             if r.get("parent") else ""))
+    print(f"  x, y on the sheet: {_n(r['x'])}, {_n(r['y'])}  ({frame}: the top-left of its bounding box"
+          + (", not a corner of the object itself while it is turned diagonally)"
+             if (r.get("faces") or "S") in ("NE", "SE", "SW", "NW") else ")"))
+    _corners(lab, g, "  corners in " + str(g.room) + ":")
+    if args.x is None:
+        print()
+        print("  To place it, measure one of those corners and run this again with where it should go, e.g.")
+        print(f"    python -m labmap xy {args.id} 820 25 --corner back-left")
+        return 0
+    got = G.xy_for(lab, geo, args.id, args.corner, (args.x, args.y))
+    if got is None:
+        print("Couldn't work that out: check faces, w and d, and that the parent is placed.")
+        return 2
+    x, y = got
+    print()
+    print(f"  To put its {args.corner} corner on {_n(args.x)}, {_n(args.y)}, type on the placeables sheet:")
+    print(f"    x = {_n(x)}   y = {_n(y)}   ({frame})")
+    moves = {"placeables": {args.id: dict(over, x=round(x, 1), y=round(y, 1))}}
+    after = _load(folder, moves)
+    if after is None:
+        return 2
+    ageo = G.place_all(after)[0]
+    parent = r.get("parent")
+    if parent and lab.placeables[parent].get("shape") == "group" and ageo.get(parent) and geo.get(parent):
+        dx = ageo[parent].origin[0] - geo[parent].origin[0]
+        dy = ageo[parent].origin[1] - geo[parent].origin[1]
+        if abs(dx) > 0.05 or abs(dy) > 0.05:
+            pr = lab.placeables[parent]
+            px, py = round(pr["x"] - dx, 1), round(pr["y"] - dy, 1)
+            print()
+            print(f"  Careful: {parent}'s x, y pin the bounding box of all its parts together, and this part "
+                  f"changes that box, so the whole group would slide {_n(dx)}, {_n(dy)} cm. Keep the other parts "
+                  f"where they are by setting {parent} x = {_n(px)}, y = {_n(py)} at the same time.")
+            moves["placeables"][parent] = {"x": px, "y": py}
+            after = _load(folder, moves)
+            if after is None:
+                return 2
+            ageo = G.place_all(after)[0]
+    if ageo.get(args.id) is not None:
+        _corners(after, ageo[args.id], "\n  with both of those, it would sit at:" if len(moves["placeables"]) > 1
+                 else "\n  it would then sit at:")
+    return 0
+
+
+def _corners(lab, g, title):
+    from . import geometry as G
+
+    poly = lab.rooms.get(g.room, {}).get("poly")
+    print(title)
+    for name, (x, y) in G.corner_points(g).items():
+        out = "   outside the room" if poly and not G.inside((x, y), poly) else ""
+        print(f"    {name:<12} {_n(x)}, {_n(y)}{out}")
+
+
+def _n(v):
+    return "?" if v is None else f"{round(v, 1):g}"
+
+
 def _site(args):
     from . import site
 
@@ -197,6 +278,18 @@ def main(argv=None):
     pl.add_argument("folder", nargs="?", help=folder_help)
     pl.add_argument("--dry-run", action="store_true", help="show the changes without writing them")
     pl.set_defaults(run=_pull)
+    xy = sub.add_parser("xy", help="where an object's corners are, and the x, y that puts a corner where you "
+                                   "measured it")
+    xy.add_argument("id", help="the id on the placeables sheet, e.g. BENCH-02 or BENCH-02.B")
+    xy.add_argument("x", nargs="?", type=float, help="where that corner should go, in room coordinates")
+    xy.add_argument("y", nargs="?", type=float)
+    xy.add_argument("--corner", default="back-left", choices=["back-left", "back-right", "front-right", "front-left"],
+                    help="which corner you measured, standing in front of the object (default back-left)")
+    xy.add_argument("--faces", help="try a different facing without editing the sheet")
+    xy.add_argument("--w", type=float, help="try a different width")
+    xy.add_argument("--d", type=float, help="try a different depth")
+    xy.add_argument("--folder", help=folder_help)
+    xy.set_defaults(run=_xy)
     st = sub.add_parser("site", help="build the lab directory in build/site")
     st.add_argument("folder", nargs="?", help=folder_help)
     st.add_argument("--open", action="store_true", help="open it in the browser")

@@ -7,6 +7,7 @@ python -m labmap layout          # draws build/layout/labs.svg, every room (or d
                                  # ...open it in Inkscape, drag things around, save...
 python -m labmap check --layout  # checks it as drawn, compares, lists the moves (or double-click try-layout.bat)
 python -m labmap pull            # keeps it: writes it into lab-data.xlsx (or double-click pull.bat)
+python -m labmap xy BENCH-11.B   # where its corners are, and the x, y that puts one where you measured it
 ```
 
 **One file, every room.** `labs.svg` has all the rooms side by side, each with its own *not placed yet* area, so

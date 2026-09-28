@@ -407,3 +407,46 @@ def largest_rectangle(free):
                     best = (k - start, sh)
             stack.append((start, h))
     return best
+
+
+# --- reading a position back off the drawing ---------------------------------------------------------------
+
+CORNERS = ("back-left", "back-right", "front-right", "front-left")
+
+
+def corner_points(g):
+    """{corner: (x, y) in room coordinates} for a placed object, named as you stand facing its front."""
+    w, d = g.size
+    return dict(zip(CORNERS, (g.T(0, 0), g.T(w, 0), g.T(w, d), g.T(0, d))))
+
+
+def xy_for(lab, geo, i, corner, at):
+    """The x, y to type on the placeables sheet so that `corner` of object i lands on room point `at`.
+
+    x and y are the top-left of the footprint's bounding box in the parent's frame. That is a corner of the object
+    itself only while it is square to the room: turned diagonally, it is a point off in mid-air that nobody can
+    measure. This does the arithmetic from a corner you can put a tape on, and into the parent's frame.
+    """
+    r = lab.placeables[i]
+    parent = r.get("parent")
+    pg = geo.get(parent) if parent else None
+    if parent and pg is None:
+        return None
+    origin, theta = (pg.origin, pg.theta) if pg else ((0.0, 0.0), 0.0)
+    shp = shape_local(lab, i, r, [])
+    rel = ANG.get(r.get("faces") or "S")
+    if shp is None or rel is None or corner not in CORNERS:
+        return None
+    local = shp[0]
+    x0, y0, x1, y1 = bbox(local)
+    cu, cv = dict(zip(CORNERS, ((x0, y0), (x1, y0), (x1, y1), (x0, y1))))[corner]
+    rp = [rot(rel, u, v) for u, v in local]
+    ca, cb = rot(rel, cu, cv)
+    a, b = rot(-theta, at[0] - origin[0], at[1] - origin[1])
+    x, y = a - (ca - min(p[0] for p in rp)), b - (cb - min(p[1] for p in rp))
+    if r.get("mount") == "in":
+        inner = interior(lab, parent)
+        if inner is None:
+            return None
+        x, y = x - inner[0], y - inner[1]  # measured inside the enclosure
+    return x, y

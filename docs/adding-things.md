@@ -37,7 +37,11 @@ thing itself.
 2. Open underneath (tables, desks, open-frame benches): `free_under` = the clear height below, at the lowest point.
    Built in (plumbing, fixed to the wall): `fixed = yes`.
 3. An L-shaped or odd bench: `shape = group` on one row, plus one row per straight piece (`BENCH-05.A`, `.B`,
-   `mount = part`, `parent = BENCH-05`); see [Shapes](spreadsheet-reference.md#shapes). Truly odd shapes: a profile in `shapes/` (see [Shapes](spreadsheet-reference.md#shapes)).
+   `mount = part`, `parent = BENCH-05`); see [Shapes](spreadsheet-reference.md#shapes). Truly odd shapes, and
+   anything following a wall that isn't at 0°, 45° or 90°: a profile in `shapes/` (see
+   [Shapes](spreadsheet-reference.md#shapes)). For a piece turned diagonally, measure one corner and let
+   `python -m labmap xy` work out the `x`, `y`:
+   [Placing something turned diagonally](spreadsheet-reference.md#placing-something-turned-diagonally).
 4. Leave `x` and `y` blank: it waits in the room's *not placed yet* area in `labs.svg`; drag it into place and
    `pull.bat`.
 
