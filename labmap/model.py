@@ -15,7 +15,8 @@ from . import svg
 
 SHEETS = ("rooms", "placeables", "equipment", "services", "circuits", "links", "items", "documents", "keep_apart")
 ID_SHEETS = ("rooms", "placeables", "equipment", "services", "circuits", "items", "documents")
-DATES = {("placeables", "checked"), ("placeables", "decommissioned"), ("documents", "filled"), ("documents", "expires")}
+DATES = {("placeables", "checked"), ("placeables", "decommissioned"), ("items", "checked"),
+         ("documents", "filled"), ("documents", "expires")}
 ID_COLUMNS = {"id", "room", "parent", "outlet", "circuit", "fed_by", "container", "from", "to"}
 NUMERIC = {
     "rooms": {"width", "depth", "ceiling", "cooling"},
@@ -67,6 +68,7 @@ SETTINGS = {  # the settings sheet can change these
     "walkway_width": 60, "reach": 30, "person_height": 200, "blocks_walking_below": 150,
     "circuit_limit": 80, "heavy_load": 1000, "grid": 5, "expiry_warning_days": 30,
     "fit_margin": 2, "door_gap": 10, "utility_reach": 300, "sprinkler_clearance": 45, "sash_clearance": 15,
+    "stock_check_days": 180,
 }
 
 
@@ -93,6 +95,7 @@ class Lab:
     decommissioned: dict = field(default_factory=dict)  # id -> date it left (None if only plan = decommissioned)
     gone: set = field(default_factory=set)  # decommissioned, with their drawers and parts
     lists: dict = field(default_factory=dict)
+    saved: object = None  # when lab-data.xlsx was last saved: the fallback "last seen" date
     settings: dict = field(default_factory=lambda: dict(SETTINGS))
     issues: list = field(default_factory=list)
     _profiles: dict = field(default_factory=dict, repr=False)
@@ -140,13 +143,17 @@ def load(folder, moves=None):
     """A Lab from a folder. moves: {sheet: {id: {column: value}}} applied on top of the workbook, to try an
     arrangement from the Inkscape layout without writing it (see layout.moves_from)."""
     folder = Path(folder)
-    rows, lists = read_workbook(folder / "lab-data.xlsx")
+    path = folder / "lab-data.xlsx"
+    rows, lists = read_workbook(path)
+    saved = dt.date.fromtimestamp(path.stat().st_mtime)
     for sheet, changes in (moves or {}).items():
         for r in rows.get(sheet, []):
             i = str(r.get("id") or "").strip().upper()
             if i in changes:
                 r.update(changes[i])
-    return build(folder, rows, lists, settings=rows.pop("_settings", None))
+    lab = build(folder, rows, lists, settings=rows.pop("_settings", None))
+    lab.saved = saved
+    return lab
 
 
 def read_workbook(path):
@@ -425,6 +432,17 @@ def build(folder, rows, lists=None, room_polys=None, settings=None):
 
 
 RS_URL = "https://uk.rs-online.com/web/c/?searchTerm={}"  # RS search: a stock number goes straight to the product
+
+
+def last_seen(lab, item):
+    """(date, where it came from) an item's count was last verified: its own checked date, else its container's,
+    else the day the workbook was last saved. Nobody logs what they take, so this says how old the number is."""
+    if item.get("checked"):
+        return item["checked"], "counted"
+    c = lab.placeables.get(item.get("container") or "", {}).get("checked")
+    if c:
+        return c, "container checked"
+    return lab.saved, "spreadsheet saved"
 
 
 def stock(qty):

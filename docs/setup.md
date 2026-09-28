@@ -97,7 +97,11 @@ it first. They work on **your data folder** (from `labmap.ini`), never on the ex
 - The documents are at real scale: 1 unit = 1 cm. The Measure tool (`M`) reads real centimetres, and the grid is
   10 cm with a heavier line every metre.
 - Type room outlines rather than drawing them: *Edit › XML Editor* (`Ctrl+Shift+X`), select `interior`, and enter
-  e.g. `M 0,0 H 720 V 540 H 0 Z`. The top of `rooms/_TEMPLATE.svg` shows how to write chamfered corners.
+  e.g. `M 0,0 H 720 V 540 H 0 Z`. `rooms/_TEMPLATE.svg` explains it on its *instructions* layer, chamfered corners
+  included; delete that layer once the outline is done.
+- `interior` is the room: the inside face of the walls, with the top-left of its bounding box at `0,0`. The grey
+  `walls` band is decoration and nothing reads it. The rooms sheet's `width` and `depth` must match `interior`'s
+  bounding box, or the checks say so.
 - In the generated layout, drag whole objects. Don't ungroup them or edit their shapes: sizes come from the
   spreadsheet, and only positions and rotations are read back. Rotate in 45° steps only (*Object › Transform ›
   Rotate*).

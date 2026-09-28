@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!--
-  EXAMPLE room shell: LAB-A, a plain 720 x 540 cm rectangle (1 unit = 1 cm).
+  EXAMPLE room shell: LAB-A, the fabrication lab: a plain 720 x 540 cm rectangle (1 unit = 1 cm).
   Only the empty room lives here. The door, window, column, fume hood, sink and every other object
   are rows in example/lab-data.xlsx, so the checks can see them. See rooms/_TEMPLATE.svg for how to draw one.
 -->
@@ -26,7 +26,7 @@
   </g>
 
   <g id="layer-notes" inkscape:groupmode="layer" inkscape:label="notes" font-family="sans-serif">
-    <text x="0" y="-30" font-size="20" font-weight="bold" fill="#1f1f1f">LAB-A · Wet lab (EXAMPLE)</text>
+    <text x="0" y="-30" font-size="20" font-weight="bold" fill="#1f1f1f">LAB-A · Fabrication lab (EXAMPLE)</text>
     <text x="720" y="-30" font-size="13" fill="#595959" text-anchor="end">↑ N = top of the drawing (not compass north)</text>
     <circle cx="0" cy="0" r="4" fill="#c00000"/>
     <text x="8" y="20" font-size="12" fill="#c00000">0,0</text>

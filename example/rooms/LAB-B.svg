@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!--
-  EXAMPLE room shell: LAB-B (1 unit = 1 cm). An L-shaped instrument room, 780 x 600 cm bounding box:
+  EXAMPLE room shell: LAB-B (1 unit = 1 cm). An L-shaped characterisation lab, 780 x 600 cm bounding box:
   top-right corner chamfered 60 cm each way, bottom-right corner (x 540-780, y 420-600) not part of the room.
   The "interior" path is what the checks treat as usable floor, so anything placed in the missing corner
   or across the chamfer is flagged as outside the room. The column and the pilaster are rows in the data.
@@ -29,7 +29,7 @@
   </g>
 
   <g id="layer-notes" inkscape:groupmode="layer" inkscape:label="notes" font-family="sans-serif">
-    <text x="0" y="-30" font-size="20" font-weight="bold" fill="#1f1f1f">LAB-B · Instrument room (EXAMPLE)</text>
+    <text x="0" y="-30" font-size="20" font-weight="bold" fill="#1f1f1f">LAB-B · Characterisation lab (EXAMPLE)</text>
     <text x="780" y="-30" font-size="13" fill="#595959" text-anchor="end">↑ N = top of the drawing (not compass north)</text>
     <circle cx="0" cy="0" r="4" fill="#c00000"/>
     <text x="8" y="20" font-size="12" fill="#c00000">0,0</text>

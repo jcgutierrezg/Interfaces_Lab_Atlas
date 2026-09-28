@@ -12,7 +12,7 @@ illustrative, not validated procedure.
 
 The `.bat` files in this folder do the same as the ones in the main folder (see [Double-click shortcuts](../docs/setup.md#double-click-shortcuts-bat-files)), but on the example. Double-click them in this order to see the whole workflow:
 
-1. `check.bat`: the report, with the fourteen deliberate problems and eight warnings listed below.
+1. `check.bat`: the report, with the fourteen deliberate problems and nine warnings listed below.
 2. `site.bat`: the lab directory. Search for "allen key", open `MIC-01`, try the level and sockets buttons.
 3. `layout.bat`: opens `build\layout`. Open `labs.svg` in Inkscape: both rooms side by side. Drag `SPEC-02`
    onto the central table (`TBL-01`), and the FTIR (`FTIR-01`) from LAB-B onto LAB-A's window bench
@@ -78,12 +78,13 @@ sheet, 8 keep-apart rules and 8 photos.
 | Equipment page with photo, SOP and COSHH form | `MIC-01`: `photos/MIC-01.png`, `sops/MIC-01-operation.md`, `COSHH-014` |
 | Spare parts: stocked, low, out, and kept in a store outside the labs | `CRYO-01` (O-rings out, window and indium foil fine), `PRB-01` (probe tips low), `SUN-01` (spare xenon lamp), `N2G-01` (filters in `elsewhere`) |
 | Ordering: RS number and supplier link | `rs_part` on the fuses, pump oil, O-rings, multimeter and cable ties (EXAMPLE numbers); `buy_link` on the xenon lamp, N2 filters and gloves |
+| Counts with a date | `checked` on the hex keys, substrates, silver paste and most spares; `I-0031` deliberately old, and items without a date fall back to their drawer's or the day the workbook was saved |
 | Items for this kind of lab | substrates (glass, ITO), optics (ND filters), electronics (BNC-to-triax adapters), a calibrated reference cell, shadow masks, silver paste, indium |
 | Forms and certificates | documents sheet: COSHH, risk assessment, calibration (one form for a balance and the solar simulator), PAT tests for a whole room, and an optical-radiation risk assessment still pending |
 
 ## Deliberate problems: the expected check results
 
-The example contains exactly these fourteen problems and eight warnings, each testing a different rule. Everything
+The example contains exactly these fourteen problems and nine warnings, each testing a different rule. Everything
 else is meant to pass, so if a check reports anything beyond this list, either the check or the example has a bug.
 
 | # | Rule | Expected finding |
@@ -110,6 +111,7 @@ else is meant to pass, so if a check reports anything beyond this list, either t
 | + | Won't fit through the door (warning) | the arriving glovebox `GB-01`, 180 × 105 × 190 cm, can't pass LAB-B's 100 cm door even on its side |
 | + | Too close to the sash (warning) | hotplate `HP-02` is 5 cm behind `HOOD-01`'s sash; work is kept at least 15 cm inside |
 | + | Still pointing at something decommissioned (warning) | `I-0051`, the oven door seal, is still a spare for `OVEN-01`, which left on 2026-06-30 |
+| + | Stock count out of date (warning) | `I-0031`, the tungsten probe tips, was last counted on 2026-01-15; required spares are counted every 180 days |
 
 ## How those results are worked out
 
@@ -146,6 +148,8 @@ unit tests in `tests/` cover that rule, and the others the example doesn't trigg
   `sash_clearance` (15 cm) behind the sash is a warning.
 - **Door fit:** equipment with `plan` new or relocate must pass through a door of its room: its smallest dimension
   plus `fit_margin` within the door's width, and its middle one within the door's height.
+- **Last seen:** an item's count carries a date: its own `checked`, else its container's, else the day
+  `lab-data.xlsx` was saved. A required spare (`min_qty`) not counted within `stock_check_days` (180) is a warning.
 - **Sockets:** each device uses `plugs` sockets at its `outlet`, or, when that's blank, at the nearest socket or
   strip in the same room (plan distance from the device's centre). A strip takes one socket of whatever it's
   plugged into. Things inside other things without a position of their own use their parent's position.
@@ -163,12 +167,13 @@ unit tests in `tests/` cover that rule, and the others the example doesn't trigg
   sill and its top, and something sitting on an object that isn't stackable (`stackable = no`, or blank for a
   category other than bench, desk, table, shelf, cabinet or cart). Also forms on the documents sheet that aren't
   approved, or that expire within `expiry_warning_days`; an expired one is a problem. And required spares (`min_qty`
-  filled on the items sheet) with none in stock, or fewer than `min_qty`. And keep-apart rows marked `warning`, and
+  filled on the items sheet) with none in stock, fewer than `min_qty`, or not counted within `stock_check_days`
+  (180). And keep-apart rows marked `warning`, and
   arrivals too big for the door, work too close to a fume hood's sash, and anything still pointing at something
-  decommissioned. The example has exactly eight warnings, on purpose: `RA-022` (optical radiation) is still
-  pending, the cold-head O-rings are out, the probe tips are low, the vacuum pump is next to the balance, the LED
-  source is too close to the dark box, the glovebox won't get through the door, a hotplate sits right behind the
-  hood's sash, and the old oven's door seal is still listed as its spare.
+  decommissioned. The example has exactly nine warnings, on purpose: `RA-022` (optical radiation) is still
+  pending, the cold-head O-rings are out, the probe tips are low and haven't been counted since January, the vacuum
+  pump is next to the balance, the LED source is too close to the dark box, the glovebox won't get through the
+  door, a hotplate sits right behind the hood's sash, and the old oven's door seal is still listed as its spare.
 - **Decommissioned** things (a `decommissioned` date, or `plan = decommissioned`), with their drawers and parts, are
   left out of every check, map and count. What still refers to them is listed: things on or in them, items kept in
   them, spares listed for them, sockets on them, links, documents, SOPs and photos.

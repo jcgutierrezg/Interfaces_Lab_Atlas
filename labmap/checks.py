@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 
 from . import geometry as G
 from . import md
-from .model import Finding, stock
+from .model import Finding, last_seen, stock
 
 NOT_OBSTACLES = {"door", "window", "workspace"}
 SPRINKLER_EXEMPT = {"door", "window", "structure", "overhead", "workspace"}  # built in, not stored or placed
@@ -62,6 +62,9 @@ RULES = {  # rule: (title, what it means, level). {placeholders} are settings.
                   "A required spare (min_qty filled on the items sheet) with none left. A blank qty counts as none.",
                   "warning"),
     "spare-low": ("Spare part running low", "Fewer in stock than its min_qty.", "warning"),
+    "stock-stale": ("Stock count out of date", "A required spare (min_qty) whose count hasn't been checked for "
+                                              "{stock_check_days} days: count it and fill in the items sheet's checked "
+                                              "column.", "warning"),
     "left-behind": ("Still pointing at something decommissioned", "It's gone, but rows or files still refer to it: "
                     "move, re-link, delete or archive them (the Decommissioning section lists them all).", "warning"),
     "keep-apart-near": ("Close together", "Things the keep_apart sheet would rather keep apart, closer than it suggests.",
@@ -109,7 +112,7 @@ def run(lab, today=None):
     res = Result(lab, geo, list(lab.issues) + issues)
     _geometry(res)
     _documents(res, today or dt.date.today())
-    _spares(res)
+    _spares(res, today or dt.date.today())
     _power(res)
     _links(res)
     _utilities(res)
@@ -281,9 +284,14 @@ def spare_state(item):
     return ("out" if not have else "low" if have < need else "ok"), have
 
 
-def _spares(res):
+def _spares(res, today):
     lab = res.lab
     for i, it in lab.items.items():
+        seen, _ = last_seen(lab, it)
+        if it.get("min_qty") and seen and (today - seen).days > lab.settings["stock_check_days"]:
+            res.add("stock-stale", f"{i} {it.get('name') or ''}: last counted on {seen} ({(today - seen).days} days "
+                                   f"ago); count the required spares every {lab.settings['stock_check_days']} days",
+                    [i], lab.placeables.get(it.get("container"), {}).get("room"))
         state, have = spare_state(it)
         if state not in ("out", "low"):
             continue

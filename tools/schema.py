@@ -135,6 +135,7 @@ ITEMS = [
     col("container", "drawer/shelf/box ID", "Where it lives: ID of a drawer, shelf, cabinet or box on the placeables sheet. Blank if it's kept outside these labs: fill elsewhere instead.", False, "ref:placeables", 14),
     col("elsewhere", "if not in these labs", "Only for things kept outside the mapped rooms, e.g. Main stores, cage 3. Shown as the location instead of a map.", False, "text", 20),
     col("qty", "optional", "Anything goes: 3, ~20, 2 boxes. For a required spare (min_qty filled), the first number is the stock count, and blank counts as none.", False, "text", 9),
+    col("checked", "date you last saw it", "When you last counted it or saw it there. The directory shows it beside the count, so people know how old the number is: nobody logs what they take. Blank = the container's checked date, or failing that the day the workbook was last saved.", False, "date", 12),
     col("min_qty", "spares: keep at least", "Fill this to make it a required spare: fewer in stock gives a warning, none in stock a louder one. Blank = not tracked.", False, "int", 10),
     col("category", "dropdown", "", False, "list:item_category", 12),
     col("spare_for", "IDs; separated; by ;", "Equipment this is a spare or replacement part for, separated by ;. It's listed under Spare parts on each of their pages.", False, "text", 16),

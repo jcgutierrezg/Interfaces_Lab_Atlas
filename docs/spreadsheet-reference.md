@@ -205,6 +205,11 @@ outside the mapped rooms, like a central store, leave `container` blank and say 
   RS. `buy_link` is any other supplier or manufacturer page. Either or both.
 - **Spare parts:** `spare_for` lists the equipment it's a spare or replacement for, separated by `;`. Each of those
   pages gets a *Spare parts* table: stock, how many to keep, where it is, where to order it.
+- **When you last saw it:** `checked` is the date you last counted it or saw it there. The directory shows it
+  beside the count ("4 · seen 2026-09-18 · 5 days ago"), because nobody logs what they take: people can see how old
+  the number is, and ask before assuming something has run out. Blank falls back to the container's `checked` date,
+  and failing that to the day the spreadsheet was last saved (shown with a `?`). A required spare not counted within
+  `stock_check_days` (settings, 180) is a warning, so the report doubles as a stock-take list.
 - **Required spares:** fill `min_qty` (how many to keep) to have stock checked. The stock count is the first number
   in `qty` (`3`, `~20`, `2 boxes`), and a blank `qty` counts as none. None in stock is a warning, and so is fewer
   than `min_qty`. Leave `min_qty` blank for spares you don't need to keep stocked.

@@ -83,6 +83,18 @@ class RoundTrip(unittest.TestCase):
         self.assertEqual(set(self.rooms), {"LAB-A", "LAB-B"})
         self.assertEqual(sorted(p.name for p in self.path.parent.iterdir()), ["labs.svg"])
 
+    def test_the_room_template_notes_stay_out_of_the_layout(self):
+        shell = self.tmp / "rooms" / "LAB-A.svg"
+        shell.write_text(shell.read_text(encoding="utf-8").replace(
+            "</svg>", '<g inkscape:groupmode="layer" inkscape:label="instructions (delete this layer)" '
+                      'xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape">'
+                      "<text x='10' y='10'>NOTE TO WHOEVER DRAWS THE ROOM</text></g></svg>"), encoding="utf-8")
+        lab = model.load(self.tmp)
+        layout.write_layouts(lab, checks.run(lab), force=True)
+        drawn = self.path.read_text(encoding="utf-8")
+        self.assertNotIn("NOTE TO WHOEVER DRAWS THE ROOM", drawn)
+        self.assertIn("LAB-A--walls", drawn)  # the room's own layers are still there
+
     def test_unchanged_layout_has_nothing_to_pull(self):
         self.assertEqual(layout.count(self.pull()[1]), 0)
 

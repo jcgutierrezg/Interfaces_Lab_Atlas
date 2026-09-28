@@ -8,7 +8,7 @@ from pathlib import Path
 
 from . import metrics
 from .checks import RULES, describe, spare_state
-from .model import order_links
+from .model import last_seen, order_links
 
 CSS = """.done { width: 36px; text-align: center; }
 .banner { background: #fffaeb; border: 1px solid #fedf89; color: #93370d; padding: 10px 14px; border-radius: 6px; font-weight: 600; }
@@ -305,7 +305,9 @@ def write(res, path, banner=None, before=None, moves=None):
     out.append(table(["Document", "Type", "Title", "For", "Status", "Filled", "Expires", ""], rows))
 
     out.append("<h2 id='spare-parts'>Spare parts</h2><p class='note'>Items with spare_for or min_qty on the items "
-               "sheet. Stock is the first number in qty; a required spare with a blank qty counts as none.</p>")
+               "sheet. Stock is the first number in qty; a required spare with a blank qty counts as none. Last "
+               "counted comes from the items sheet's checked column (or the drawer's, or the day the spreadsheet "
+               "was saved): red when it's older than the stock_check_days setting.</p>")
     rows = []
     for i, it in sorted(lab.items.items()):
         if not it.get("spare_for") and not it.get("min_qty"):
@@ -314,9 +316,14 @@ def write(res, path, banner=None, before=None, moves=None):
         flag = {"out": ("html", "<span class='bad'>none left</span>"),
                 "low": ("html", "<span class='bad'>low</span>")}.get(state, "")
         order = ", ".join(f"<a href='{esc(u)}'>{esc(t)}</a>" for t, u in order_links(it))
+        seen, how = last_seen(lab, it)
+        old = seen and (dt.date.today() - seen).days > lab.settings["stock_check_days"]
+        when = "" if not seen else ("html", f"<span class='{'bad' if old else ''}'>{seen}</span>"
+                                            f"{'' if how == 'counted' else ' <span class=note>(not counted)</span>'}")
         rows.append((f"{i} {it.get('name') or ''}", ", ".join(it.get("spare_for") or []), it.get("qty") or "",
-                     it.get("min_qty") or "", it.get("container") or it.get("elsewhere") or "", ("html", order), flag))
-    out.append(table(["Part", "For", "In stock", "#Keep", "Where", "Order", ""], rows))
+                     it.get("min_qty") or "", when, it.get("container") or it.get("elsewhere") or "",
+                     ("html", order), flag))
+    out.append(table(["Part", "For", "In stock", "#Keep", "Last counted", "Where", "Order", ""], rows))
 
     out.append("<h2 id='triage'>Triage</h2><p class='note'>Equipment with a plan other than keep, or used a few times "
                "a year or less. Removing things usually frees more space than rearranging them.</p>")

@@ -34,6 +34,10 @@ server and no internet. It has:
   letter (G gas, W water, V vacuum, A air, N network…). Hover over one to see its circuit and what it feeds; the
   lines light up. Click it to open its page, which opens with the sockets shown. Sockets without an x and y aren't
   drawn. The check report has the same button.
+- **Counts with a date**: every "how many" carries when it was last counted ("4 · seen 2026-09-18 · 5 days ago"),
+  from the items sheet's `checked` column, or the drawer's, or the day the spreadsheet was saved (marked `?`).
+  Counts older than `stock_check_days` (180) are highlighted, so people can see when a number is too old to trust
+  and ask rather than assume something has run out.
 - **A page per socket, strip or tap** (which circuit, what's plugged in), per room (a clickable plan) and per SOP
   (with `[[ID]]` links working).
 - A copy of the check report.

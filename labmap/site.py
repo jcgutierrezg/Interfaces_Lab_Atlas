@@ -14,7 +14,7 @@ import unicodedata
 from collections import defaultdict
 from pathlib import Path
 
-from . import checks, layout, md, report
+from . import checks, layout, md, model, report
 from . import geometry as G
 from .model import order_links
 
@@ -43,6 +43,8 @@ th { background: var(--soft); font-weight: 600; }
 table.facts th { width: 190px; background: none; color: var(--muted); font-weight: 500; }
 tr:target { background: var(--hi); animation: rowflash .8s ease-in-out 4 alternate; }
 @keyframes rowflash { from { background: var(--hi); } to { background: #ffd84d; } }
+.seen { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.seen.stale { color: #93370d; background: #fffaeb; border: 1px solid #fedf89; border-radius: 999px; padding: 0 6px; }
 .gone { background: #f2f4f7; border: 1px solid var(--line); border-left: 4px solid #667085; padding: 8px 12px;
         border-radius: 6px; font-weight: 600; }
 .jump { display: inline-block; margin-left: 10px; padding: 1px 10px; border-radius: 999px; background: #e11d48;
@@ -362,12 +364,26 @@ class Site:
         pics = self.photos.get(it["id"], [])
         return f"<a href='{root}{pics[0][0]}'><img class='thumb' src='{root}{pics[0][1]}' alt=''></a>" if pics else ""
 
+    def seen_text(self, it):
+        """'3 · seen 2026-09-21' for an item's count, greyed out when the count is older than stock_check_days."""
+        date, how = model.last_seen(self.lab, it)
+        if not date:
+            return esc(it.get("qty"))
+        days = (dt.date.today() - date).days
+        stale = days > self.lab.settings["stock_check_days"]
+        ago = "today" if days <= 0 else "yesterday" if days == 1 else \
+            f"{days} days ago" if days < 60 else f"{days // 30} months ago" if days < 730 else f"{days // 365} years ago"
+        title = {"counted": "counted then", "container checked": "the drawer's contents were checked then",
+                 "spreadsheet saved": "no count date: the spreadsheet was last saved then"}[how]
+        return (f"{esc(it.get('qty'))} <span class='seen{' stale' if stale else ''}' title='{title}'>"
+                f"{'?' if how == 'spreadsheet saved' else ''} seen {date} · {ago}</span>")
+
     def item_rows(self, items, root):
         rows = []
         for it in sorted(items, key=lambda t: str(t.get("name") or "")):
             spare = ("Spare for " + ", ".join(self.a(e, root) for e in it["spare_for"]) + ". ") if it.get("spare_for") else ""
             rows.append(f"<tr id='{fname(it['id'])}'><td>{self.thumb(it, root)}{esc(it.get('name'))}</td>"
-                        f"<td>{esc(it.get('qty'))}</td><td>{esc(it.get('synonyms'))}</td><td>{self.order(it)}</td>"
+                        f"<td>{self.seen_text(it)}</td><td>{esc(it.get('synonyms'))}</td><td>{self.order(it)}</td>"
                         f"<td>{spare}{esc(it.get('notes'))}</td></tr>")
         return ("<div class='scroll'><table><thead><tr><th>Item</th><th>How many</th><th>Also called</th><th>Order</th>"
                 "<th>Notes</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table></div>")
@@ -384,7 +400,7 @@ class Site:
             where = (self.crumbs(it["container"], root) if it.get("container") else
                      f"{esc(it.get('elsewhere'))} <span class='note'>(outside these labs)</span>")
             name = self.a(it["id"], root, it.get("name")) if it.get("container") else esc(it.get("name"))
-            rows.append(f"<tr id='spare-{fname(it['id'])}'><td>{self.thumb(it, root)}{name}</td><td>{esc(it.get('qty'))}</td>"
+            rows.append(f"<tr id='spare-{fname(it['id'])}'><td>{self.thumb(it, root)}{name}</td><td>{self.seen_text(it)}</td>"
                         f"<td>{esc(it.get('min_qty'))}</td><td>{badge}</td><td>{where}</td><td>{self.order(it)}</td>"
                         f"<td>{esc(it.get('notes'))}</td></tr>")
         return ("<h2 id='spares'>Spare parts</h2><div class='scroll'><table><thead><tr><th>Part</th><th>In stock</th>"

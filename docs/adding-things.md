@@ -15,8 +15,14 @@ thing itself.
 
 1. `rooms` sheet: `id` (e.g. `LAB-C`), `name`, `width` and `depth` (the outline's bounding box, cm), `ceiling` (the
    lowest point), `shell` = `LAB-C.svg`. If you know them: `cooling` (W), `sprinklers` (yes/no).
-2. Copy `rooms/_TEMPLATE.svg` to `rooms/LAB-C.svg` in your data folder and type the outline in it (instructions at
-   the top of the file). Only the empty room goes there: doors, windows and everything else are rows.
+2. Copy `rooms/_TEMPLATE.svg` to `rooms/LAB-C.svg` in your data folder (the name must match `shell`), open it in
+   Inkscape and type the room's outline into the path with id `interior`: the **inside face of the walls**, with
+   the top-left of its bounding box at `0,0`. The template spells this out on its **instructions** layer, with
+   examples for square and chamfered corners: read it in Inkscape, then delete that layer (*Layer › Delete Current
+   Layer*) when you're done. (A leftover instructions layer is ignored by the layout anyway. The same notes are an
+   XML comment at the top of the file, if you'd rather read it in a text editor.) The grey `walls` band around it is
+   decoration: nothing reads it. Only the empty room goes in this file: doors, windows, pillars, benches and
+   everything else are rows on the placeables sheet.
 3. Its doors: a `placeables` row each with category `door`, `mount = floor`, `w` = the clear opening, `h` = its height,
    `clear_front` = the swing, `fixed = yes`. Windows: category `window`, `mount = wall`, `z` = the sill height.
 4. `layout.bat`: the new room appears in `labs.svg` beside the others.
@@ -71,7 +77,7 @@ thing itself.
 
 1. `items` sheet: `id` = the next `I-` number (`I-0052`), `name`, `synonyms` (every other name people would search
    for), `container` = the drawer, shelf or box it lives in (or `elsewhere`, if it's kept outside these labs),
-   `qty`, `category`.
+   `qty`, `category`, and `checked` = the date you counted it (the directory shows it beside the count).
 2. Where to buy it: `rs_part` (RS stock number) and/or `buy_link`.
 3. A spare part: `spare_for` = the equipment it fits; `min_qty` if it has to be kept in stock (fewer is a warning).
 4. Optional photo: `photos/I-0052.jpg`.

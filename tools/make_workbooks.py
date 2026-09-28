@@ -127,6 +127,7 @@ SETTINGS = [  # key, value, unit, meaning
     ("utility_reach", 300, "cm", "How far a gas, water, drain, vacuum, air, network or exhaust point may be (needs column)."),
     ("sprinkler_clearance", 45, "cm", "In rooms with sprinklers, nothing may reach higher than this below the ceiling."),
     ("sash_clearance", 15, "cm", "Work inside a fume hood is kept at least this far behind the sash."),
+    ("stock_check_days", 180, "days", "Count the required spares (min_qty on the items sheet) at least this often."),
 ]
 
 
@@ -196,7 +197,8 @@ README = [
     ("4. circuits + services: the distribution board, then every socket, strip and tap.", ""),
     ("5. links: which PC drives which instrument; cable and tubing limits.", ""),
     ("6. items: drawer contents. Start with the ~50 things people hunt for, then grow on demand. Spare parts go "
-     "here too: spare_for says which equipment, min_qty how many to keep, rs_part / buy_link where to order.", ""),
+     "here too: spare_for says which equipment, min_qty how many to keep, rs_part / buy_link where to order. "
+     "checked = when you last saw it: the directory shows it beside the count.", ""),
     ("", ""),
     ("Conventions", "bold"),
     ("Units: centimetres, watts, kilograms. Whole numbers only: round to the nearest cm.", ""),

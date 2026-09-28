@@ -1,4 +1,5 @@
 """Run from the Lab_Map folder:  python -m unittest discover -s tests -t ."""
+import datetime as dt
 import tempfile
 import unittest
 from pathlib import Path
@@ -22,9 +23,10 @@ EXAMPLE = {  # example/README.md: the fourteen deliberate problems
     ("sprinkler", ("CAB-01", "LAB-A")),
     ("utility", ("SUN-01", "EXH-01")),
     ("socket-load", ("OUT-06",)),
-    ("document-unapproved", ("RA-022",)),  # the eight deliberate warnings
+    ("document-unapproved", ("RA-022",)),  # the nine deliberate warnings
     ("spare-out", ("I-0036",)),
     ("spare-low", ("I-0031",)),
+    ("stock-stale", ("I-0031",)),
     ("keep-apart-near", ("VAC-01", "BAL-01")),
     ("keep-apart-near", ("LED-01", "DARK-01")),
     ("door-fit", ("GB-01", "DOOR-02")),
@@ -232,6 +234,37 @@ class BeforeMeasuring(unittest.TestCase):
         f = found(lab_from(rows, equipment=eq))
         self.assertIn(("door-fit", ("BIG", "DOOR")), f)
         self.assertNotIn(("door-fit", ("OK", "DOOR")), f)  # 85 + 2 cm margin fits a 90 cm door
+
+
+class LastSeen(unittest.TestCase):
+    """When a count was last verified: the item's checked date, its container's, or the day the workbook was saved."""
+
+    def lab(self, items, saved=None):
+        lab = lab_from([P("B", x=0, y=0, w=100, d=60, h=90),
+                        P("B.D1", "in", "B", category="drawer", w=40, d=50, h=10, checked="2026-03-01")],
+                       items=items)
+        lab.saved = saved
+        return lab
+
+    def test_where_the_date_comes_from(self):
+        items = [dict(id="I-1", name="own", container="B.D1", checked="2026-08-01"),
+                 dict(id="I-2", name="from the drawer", container="B.D1"),
+                 dict(id="I-3", name="no dates at all", container="B")]
+        lab = self.lab(items, saved=dt.date(2026, 9, 1))
+        self.assertEqual(model.last_seen(lab, lab.items["I-1"]), (dt.date(2026, 8, 1), "counted"))
+        self.assertEqual(model.last_seen(lab, lab.items["I-2"]), (dt.date(2026, 3, 1), "container checked"))
+        self.assertEqual(model.last_seen(lab, lab.items["I-3"]), (dt.date(2026, 9, 1), "spreadsheet saved"))
+        self.assertEqual(model.load(ROOT / "example").saved, dt.date.fromtimestamp(
+            (ROOT / "example" / "lab-data.xlsx").stat().st_mtime))
+
+    def test_required_spares_go_stale(self):
+        items = [dict(id="I-1", name="old spare", container="B.D1", checked="2026-01-01", min_qty=2, qty=5),
+                 dict(id="I-2", name="fresh spare", container="B.D1", checked="2026-08-01", min_qty=2, qty=5),
+                 dict(id="I-3", name="not a tracked spare", container="B.D1", checked="2026-01-01", qty=5)]
+        found = {(f.rule, f.ids) for f in checks.run(self.lab(items), today=dt.date(2026, 9, 1)).findings}
+        self.assertEqual({x for x in found if x[0] == "stock-stale"}, {("stock-stale", ("I-1",))})
+        later = checks.run(self.lab(items, saved=dt.date(2026, 9, 1)), today=dt.date(2026, 9, 1))
+        self.assertEqual({x.ids for x in later.findings if x.rule == "stock-stale"}, {("I-1",)})
 
 
 class Decommissioning(unittest.TestCase):

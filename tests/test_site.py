@@ -76,6 +76,14 @@ class Directory(unittest.TestCase):
         self.assertNotIn('"OVEN-01"', (self.tmp / "search.js").read_text(encoding="utf-8"))  # not searched
         self.assertNotIn("OVEN-01", (self.tmp / "rooms" / "LAB-A.html").read_text(encoding="utf-8"))
 
+    def test_counts_show_when_they_were_last_seen(self):
+        page = (self.tmp / "o" / "PRB-01.html").read_text(encoding="utf-8")
+        self.assertIn("seen 2026-01-15", page)  # the probe tips, on the spare parts table
+        self.assertIn("class='seen stale'", page)  # older than stock_check_days
+        drawer = (self.tmp / "o" / "PED-01.D2.html").read_text(encoding="utf-8")
+        self.assertIn("seen 2026-09-21", drawer)  # the hex key set, in its drawer's item list
+        self.assertNotIn("class='seen stale'", drawer)
+
     def test_document_links(self):
         self.assertEqual(site.doc_href("\\\\server\\share\\COSHH\\014.pdf"), "file://server/share/COSHH/014.pdf")
         self.assertEqual(site.doc_href("S:\\Safety\\RA-003.pdf"), "file:///S:/Safety/RA-003.pdf")

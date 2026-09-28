@@ -708,8 +708,11 @@ def editable(lab, res):
         if b["shell"] is not None:
             for child in b["shell"]:
                 tag = child.tag.split("}")[-1]
+                label = (child.get(f"{{{NS_INK}}}label") or "").lower()
                 if tag in ("namedview", "title", "metadata") or not isinstance(child.tag, str):
                     continue
+                if label.startswith("instructions"):
+                    continue  # the room template's notes to whoever draws the room: not part of the room
                 el = _prefixed(child, f"{rid}--")
                 if el.get(f"{{{NS_INK}}}groupmode") == "layer":
                     el.set(f"{{{NS_SOD}}}insensitive", "true")
