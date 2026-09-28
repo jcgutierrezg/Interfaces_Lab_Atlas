@@ -132,6 +132,19 @@ A window is `mount = wall` with `z` = sill height and `h` = window height. Somet
 between sill and top, is a **warning**, not a problem: benches under the sill are fine. To keep a strip in front of
 the window clear as well, give the window a `clear_front`.
 
+**The sill itself** is only a height, unless it sticks out into the room or people put things on it. When it does,
+add it as its own row, a shallow wall-mounted shelf:
+
+| | sill row | window row |
+|---|---|---|
+| `category` | `shelf` (or `structure`, if nothing may go on it) | `window` |
+| `mount`, `z` | `wall`, the height of the sill's **underside** | `wall`, the height of its **top** (where the glass starts) |
+| `w`, `d`, `h` | along the wall, how far it sticks out, its thickness | the opening's width, ~10, the glass height |
+
+Then things on the sill are `mount = on` with the sill as their `parent`, and they stand at the right height; and a
+bench pushed against the wall where the sill sticks out is flagged as an overlap, which is what you want. A radiator
+under the window is another row: category `structure`, `mount = floor`.
+
 ## Clearances
 
 `clear_front`, `clear_back`, `clear_left`, `clear_right` are measured relative to the object's own front: left
