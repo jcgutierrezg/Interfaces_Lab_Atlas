@@ -44,8 +44,12 @@ before and after. `pull` when you're happy; it saves the move list as a printabl
   in that room's *not placed yet* area; drag it onto a bench and `pull` fills in all three. Drag something into a
   waiting area to take it out of the layout: its x and y are cleared.
 - **Rotate** in 45° steps (*Object › Transform › Rotate*). Anything else is rounded to the nearest 45°.
-- Walls and your notes are locked. Objects with `fixed = yes` can still be dragged, but `pull` ignores the move
-  and says so; what stands on them is measured from where they really are.
+- **Fixed things are locked.** Walls and notes, and every object with `fixed = yes` (doors, windows, the eyewash,
+  plumbed-in benches, columns), can't be selected or dragged on the canvas: *Edit › Unlock All* overrides that for
+  a session, but `pull` still ignores their moves and says so, and what stands on them is measured from where they
+  really are. To move one for good: clear `fixed`, drag it, `pull`, then set `fixed = yes` again (or just change
+  its `x`/`y` in the spreadsheet). Things standing on or inside a fixed object, such as hotplates in a fume hood,
+  stay movable; the parts of a fixed bench are locked with it.
 - Sizes come from the spreadsheet: resizing in Inkscape is ignored.
 - `pull` writes into `lab-data.xlsx`, so save and close it in Excel first. A copy goes to `build/backups/` every
   time, and `pull --dry-run` shows the changes without writing them. Afterwards the drawing is redrawn to match:

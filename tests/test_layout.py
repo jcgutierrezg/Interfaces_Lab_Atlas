@@ -95,6 +95,18 @@ class RoundTrip(unittest.TestCase):
         self.assertNotIn("NOTE TO WHOEVER DRAWS THE ROOM", drawn)
         self.assertIn("LAB-A--walls", drawn)  # the room's own layers are still there
 
+    def test_fixed_things_are_locked_in_inkscape(self):
+        drawn = self.path.read_text(encoding="utf-8")
+
+        def locked(i):
+            return "sodipodi:insensitive" in drawn.split(f'id="obj-{i}"')[1].split(">")[0]
+
+        self.assertTrue(locked("DOOR-01"))  # fixed = yes: the door, the eyewash, the plumbed-in bench
+        self.assertTrue(locked("EYE-01"))
+        self.assertTrue(locked("BENCH-01"))
+        self.assertFalse(locked("SPEC-02"))  # ordinary things stay draggable
+        self.assertFalse(locked("HP-01"))  # inside the fixed fume hood, but movable in it
+
     def test_unchanged_layout_has_nothing_to_pull(self):
         self.assertEqual(layout.count(self.pull()[1]), 0)
 

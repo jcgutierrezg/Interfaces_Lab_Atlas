@@ -24,7 +24,10 @@ thing itself.
    decoration: nothing reads it. Only the empty room goes in this file: doors, windows, pillars, benches and
    everything else are rows on the placeables sheet.
 3. Its doors: a `placeables` row each with category `door`, `mount = floor`, `w` = the clear opening, `h` = its height,
-   `clear_front` = the swing, `fixed = yes`. Windows: category `window`, `mount = wall`, `z` = the sill height.
+   `clear_front` = the swing, `fixed = yes`. `x`/`y` is the corner of its footprint nearest the room's origin, and
+   `faces` points into the room (a door in the bottom wall faces `N`). Easier: leave `x`, `y` and `fixed` blank,
+   drag it onto its wall in the layout, `pull`, then set `fixed = yes` (fixed things are locked in Inkscape and
+   their moves aren't pulled). Windows: category `window`, `mount = wall`, `z` = the sill height.
 4. `layout.bat`: the new room appears in `labs.svg` beside the others.
 
 ## Furniture: a bench, table, desk, cabinet, shelf, cart

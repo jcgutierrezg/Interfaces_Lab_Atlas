@@ -387,7 +387,10 @@ def _object(lab, i, origin, angle, abs_angle, flagged, unplaced=False, sizes=Non
         tip += " · " + " · ".join(flagged[i][0])
     tf = f"translate({_n(origin[0])},{_n(origin[1])})" + (f" rotate({_n(angle)})" if angle % 360 else "")
     cls = f' class="lv-{levels[i]}"' if levels and i in levels else ""
-    ink = "" if nest else f' inkscape:label="{esc(i)}"'
+    locked = r.get("fixed") == "yes" or (r.get("mount") == "part"  # a piece of a fixed bench, but not what's on it
+                                         and P.get(r.get("parent"), {}).get("fixed") == "yes")
+    ink = "" if nest else (f' inkscape:label="{esc(i)}"' +
+                           (' sodipodi:insensitive="true"' if locked else ""))  # fixed = yes: locked in Inkscape too
     out = [f'<g id="{PREFIX}{esc(i)}"{cls}{ink} transform="{tf}"><title>{esc(tip)}</title>']
     kids = lab.children.get(i, [])
     if r.get("shape") == "group":
@@ -749,8 +752,8 @@ def editable(lab, res):
         root.append(ET.fromstring(text))
     for key, name in LAYERS:
         root.append(ET.fromstring(
-            f'<g xmlns="{NS_SVG}" xmlns:inkscape="{NS_INK}" id="layer-{key}" inkscape:groupmode="layer" '
-            f'inkscape:label="{esc(name)}">{"".join(layers[key])}</g>'))
+            f'<g xmlns="{NS_SVG}" xmlns:inkscape="{NS_INK}" xmlns:sodipodi="{NS_SOD}" id="layer-{key}" '
+            f'inkscape:groupmode="layer" inkscape:label="{esc(name)}">{"".join(layers[key])}</g>'))
     help_lines = ("Click anything and drag it: onto another bench, or into another room. pull works out where it "
                   "landed and what it stands on.",
                   "To put something from the floor on a bench (or back), move it to that layer: Layer › Move Selection "
