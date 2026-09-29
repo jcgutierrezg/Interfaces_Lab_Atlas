@@ -15,14 +15,14 @@ the problems grouped by rule, then progress, rooms, bench space, fume hoods, pow
 containers and what isn't placed yet. Findings are **problems** (something's wrong) or **warnings** (worth a look:
 covered windows, stacks on things not marked stackable, forms not approved or about to expire, spare parts
 out of stock or running low, required spares not counted for a long time, things closer than `keep_apart`
-suggests, arrivals too big for the door, a cupboard door that only opens to 90°). It's fine
+suggests, arrivals too big for the door). It's fine
 to run on half-filled data: missing data shows up under progress, not as problems. [example/README.md](../example/README.md) explains
 each rule.
 
 The thresholds are on the **`settings` sheet** of `lab-data.xlsx`: walkway width (60 cm), how close a clear zone
 must be to a path (30 cm), clear-zone height (200 cm), what counts as in the way (anything starting below
 150 cm), circuit limit (80%), heavy load (1000 W), the raster size (5 cm), `fit_margin` (2 cm of slack for
-measuring error and ventilation, under benches, below the ceiling and through doors), `door_gap` (10 cm),
+measuring error and ventilation, under benches, below the ceiling and through doors),
 `utility_reach` (3 m), `sprinkler_clearance` (45 cm), `sash_clearance` (15 cm) and `stock_check_days` (180). Change them to match your
 safety office's numbers.
 

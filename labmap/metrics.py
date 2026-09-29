@@ -7,9 +7,9 @@ from collections import defaultdict
 
 from . import geometry as G
 from .checks import NOT_OBSTACLES
+from .model import CONTAINERS
 
 SURFACES = {"bench", "optical-table", "table", "desk", "shelf", "cart"}
-CONTAINERS = {"drawer", "shelf", "cabinet", "container", "pedestal"}
 
 
 def location(lab, i):

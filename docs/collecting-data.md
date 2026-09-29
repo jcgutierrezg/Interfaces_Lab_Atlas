@@ -34,10 +34,9 @@ Agree on this before the walk-arounds, so everyone measures the same way. Whole 
 - **Clearances:** from the manual or the maker, not by eye: ventilation gaps (`clear_back`, sides), room to open a
   lid (`clear_top`), room to stand and work (`clear_front`). Include room to reach the back panel if people have to.
 - **Fridges, freezers, cabinets:** which side the door is hinged on (`door`: left, right or both, as you face it).
-  The door's swing is kept clear in front, which is a real requirement, and `door_gap` (settings, 10 cm) beside the
-  hinge so it can swing back past 90°. A cupboard in a row of cupboards, or in a corner, has no such gap: that is
-  only a warning, since 90° is enough to use it. Where it isn't — a fridge whose shelves slide out — measure the
-  room you actually need into `clear_left` or `clear_right`, and blocking it becomes a problem.
+  The width it sweeps opening to 90° is kept clear in front. Nothing is kept clear beside the hinge, so cupboards
+  can stand in a row or in a corner. Where a door does have to open further back — a fridge whose shelves slide
+  out — measure the room it needs into `clear_left` or `clear_right`, and blocking that is a problem.
 - **Benches and tables:** the top's height `h`; `free_under` at the **lowest** point underneath (rails, braces,
   drawer runners), not the middle.
 - **Equipment:** nameplate power; the services it needs besides power (`needs`); critical or not.

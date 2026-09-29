@@ -61,15 +61,18 @@ FALLBACK_LISTS = {
     "door": ["left", "right", "both"],
     "level": ["problem", "warning"],
 }
-UTILITIES = ("gas", "vacuum", "air", "water", "drain", "network", "exhaust", "earth")  # what the needs column can ask for
+CONTAINERS = {"drawer", "shelf", "cabinet", "container", "pedestal"}  # these hold things, rather than stand somewhere
+UTILITIES =("gas", "vacuum", "air", "water", "drain", "network", "exhaust", "earth")  # what the needs column can ask for
 FALLBACK_LINK_LEN = {"usb": 500, "usb3": 300, "ethernet": 10000, "serial": 1500, "gpib": 200, "video": 500,
                      "coax": 500, "triax": 300, "fiber": 1000, "hv-cable": 300, "interlock": 1000, "vacuum-line": 200}
 SETTINGS = {  # the settings sheet can change these
     "walkway_width": 60, "reach": 30, "person_height": 200, "blocks_walking_below": 150,
     "circuit_limit": 80, "heavy_load": 1000, "grid": 5, "expiry_warning_days": 30,
-    "fit_margin": 2, "door_gap": 10, "utility_reach": 300, "sprinkler_clearance": 45, "sash_clearance": 15,
+    "fit_margin": 2, "utility_reach": 300, "sprinkler_clearance": 45, "sash_clearance": 15,
     "stock_check_days": 180,
 }
+RETIRED = {"door_gap": "nothing is kept clear beside a door's hinge any more: a door opening to 90 degrees needs "
+                       "only the swing in front. Use clear_left or clear_right where one has to open further."}
 
 
 @dataclass
@@ -452,7 +455,9 @@ def build(folder, rows, lists=None, room_polys=None, settings=None):
     """A Lab from sheet rows ({sheet: [ {column: value} ]}). room_polys can stand in for the room SVGs (tests)."""
     lab = Lab(folder=Path(folder), lists=lists or {})
     for key, value in (settings or {}).items():
-        if key not in SETTINGS:
+        if key in RETIRED:
+            lab.issue(f"settings: '{key}' is no longer used, so you can delete that row: {RETIRED[key]}")
+        elif key not in SETTINGS:
             lab.issue(f"settings: '{key}' isn't a setting the checks know")
         elif value is None:
             continue

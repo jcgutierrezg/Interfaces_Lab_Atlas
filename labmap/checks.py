@@ -31,9 +31,6 @@ RULES = {  # rule: (title, what it means, level). {placeholders} are settings.
                                      "{fit_margin} cm of slack.", "problem"),
     "overlap": ("Overlap", "Two footprints overlap on the plan and in height.", "problem"),
     "clear-zone": ("Clear zone blocked", "Something stands in space that has to stay free.", "problem"),
-    "hinge": ("Door opens only to 90°", "Something stands right beside a door's hinge (or the hinge side is against "
-                                        "a wall), so the door can't swing back past 90 degrees. Fine for most "
-                                        "cupboards; fill in clear_left or clear_right where it isn't.", "warning"),
     "headroom": ("Headroom", "Not enough space above: a lid, sash or stack hits a shelf, or comes within {fit_margin} cm "
                              "of the ceiling.", "problem"),
     "sprinkler": ("Too close to the sprinklers", "Reaches higher than {sprinkler_clearance} cm below the ceiling of a room "
@@ -158,20 +155,19 @@ def tucked_under(P, geo, ids):
     return out
 
 
-def zones(r, g, person=200, door_gap=G.DOOR_GAP, headroom=None):
-    """[(side, polygon, height band, hinge only)] of the space an object needs kept free."""
+def zones(r, g, person=200, headroom=None):
+    """[(side, polygon, height band)] of the space an object needs kept free."""
     zr = (0, headroom if headroom is not None else person) if r.get("mount") in ("floor", "wall", "part") else g.z
     if r.get("category") == "window":
         zr = g.z  # a window only needs its own height kept clear
     out = []
     if g.zone:
-        out.append(("front", g.zone, zr, False))
+        out.append(("front", g.zone, zr))
     else:
-        hinge = G.hinge_sides(r)
-        for side, (u0, v0, u1, v1) in G.clear_boxes(r, *g.size, door_gap).items():
-            out.append((side, [g.T(u0, v0), g.T(u1, v0), g.T(u1, v1), g.T(u0, v1)], zr, side in hinge))
+        for side, (u0, v0, u1, v1) in G.clear_boxes(r, *g.size).items():
+            out.append((side, [g.T(u0, v0), g.T(u1, v0), g.T(u1, v1), g.T(u0, v1)], zr))
     if r.get("clear_top"):
-        out.append(("top", g.poly, (g.z[1], g.z[1] + r["clear_top"]), False))
+        out.append(("top", g.poly, (g.z[1], g.z[1] + r["clear_top"])))
     return out
 
 
@@ -256,13 +252,10 @@ def _geometry(res):
                 if g.z[1] > limit + G.EPS:
                     res.add("sprinkler", f"{i} reaches {g.z[1]:.0f} cm; with sprinklers, nothing above {limit:.0f} cm "
                                          f"({s['sprinkler_clearance']} cm below the {ceiling} cm ceiling)", [i, rid], rid)
-            for side, zp, zr, hinge in zones(r, g, s["person_height"], s["door_gap"], under.get(i)):
+            for side, zp, zr in zones(r, g, s["person_height"], under.get(i)):
                 if (side != "top" and outline and i not in window and r.get("mount") in ("floor", "wall", "part")
                         and not G.contains(outline, zp)):
-                    if hinge:
-                        res.add("hinge", f"{i}'s door opens to 90°: its hinge side is against a wall", [i], rid)
-                    else:
-                        res.add("wall-clearance", f"{i}'s {side} clear zone runs into a wall", [i], rid)
+                    res.add("wall-clearance", f"{i}'s {side} clear zone runs into a wall", [i], rid)
                 pieces = G.convex_pieces(zp)
                 for j in ids:
                     if j == i or j in window or related(i, j) or dead_zone(i, j):
@@ -274,8 +267,6 @@ def _geometry(res):
                     elif side == "top":
                         res.add("headroom", f"{i} needs {r['clear_top']} cm above it (up to {zr[1]:.0f} cm), but {j} "
                                             f"starts at {geo[j].zc[0]:.0f} cm", [i, j], rid)
-                    elif hinge:
-                        res.add("hinge", f"{i}'s door opens to 90°: {j} is right beside its hinge", [i, j], rid)
                     else:
                         size = f" ({r['clear_' + side]} cm)" if r.get("clear_" + side) else ""
                         res.add("clear-zone", f"{j} stands in {i}'s {side} clear zone{size}", [i, j], rid)

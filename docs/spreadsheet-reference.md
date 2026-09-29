@@ -186,10 +186,10 @@ A clearance applies in the plane the object sits in. For something on a bench, `
 free in front of it. For something on the floor, it's floor: standing room, drawer pull-out, door swing. Mandatory
 clear zones (eyewash, electrical panel, doors) are just large clearances on those objects, with `fixed = yes`.
 
-**A door's hinge.** Filling in `door` keeps the swing clear in front (the leaf's width, half of it each side for
-double doors) and `door_gap` beside the hinge. The gap beside the hinge is the one thing here that is only a
-warning: a cupboard hard against a wall or its neighbour still opens to 90°, which is enough to use it. Measure
-`clear_left` or `clear_right` yourself where you need the door to swing further back.
+**A door's swing.** Filling in `door` keeps the width it sweeps opening to 90° clear in front: the leaf's width,
+half of it each side for double doors. Nothing is kept clear beside the hinge, because cupboards stand in rows and
+in corners and 90° is enough to use one. Where a door has to open further back, measure the room it needs into
+`clear_left` or `clear_right` yourself.
 
 **How tall the zone is.** For something on the floor or on a wall, it is kept clear up to `person_height` (200 cm):
 that is where someone stands. One exception: a thing standing wholly in the free space under something else — a

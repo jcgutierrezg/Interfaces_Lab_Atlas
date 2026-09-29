@@ -52,6 +52,12 @@ before and after. `pull` when you're happy; it saves the move list as a printabl
 - **New equipment**: give it a `room` and a `mount` (or change its layer later) and leave `parent`, `x` and `y` blank. It waits
   in that room's *not placed yet* area; drag it onto a bench and `pull` fills in all three. Drag something into a
   waiting area to take it out of the layout: its x and y are cleared.
+- **Contents aren't drawn.** Drawers, and the cupboards inside a fume hood or a pedestal (`mount = in`, category
+  `drawer`, `cabinet`, `shelf`, `container` or `pedestal`), are part of the thing that holds them: they don't
+  appear on the plan and never wait in the *not placed yet* area. Equipment inside an enclosure, such as a hotplate
+  in a fume hood, does.
+- **Clearances** are drawn as dashed red boxes: what you measured into `clear_front` and the rest, and the swing
+  in front of anything with a `door`.
 - **Rotate** in 45° steps (*Object › Transform › Rotate*). Anything else is rounded to the nearest 45°.
 - **Fixed things are locked.** Walls and notes, and every object with `fixed = yes` (doors, windows, the eyewash,
   plumbed-in benches, columns), can't be selected or dragged on the canvas: *Edit › Unlock All* overrides that for

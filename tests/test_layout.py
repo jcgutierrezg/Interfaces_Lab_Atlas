@@ -379,5 +379,41 @@ class Grid(unittest.TestCase):
         self.assertIn('inkscape:zoom="0.42"', after)
 
 
+class Contents(unittest.TestCase):
+    """What's inside something: a hood's cupboards are part of it, a hotplate in it is a thing to be placed."""
+
+    def lab(self, **extra):
+        rows = [dict(id="HOOD", room="R", mount="floor", category="fume-hood", x=10, y=10, w=150, d=90, h=240,
+                     inner_w=120, inner_d=60, inner_h=80),
+                dict(id="HOOD.C1", room="R", parent="HOOD", mount="in", category="cabinet", w=90, d=45, h=60),
+                dict(id="PLATE", room="R", parent="HOOD", mount="in", category="hotplate", w=30, d=30, h=15, **extra),
+                dict(id="CAB", room="R", mount="floor", category="cabinet", x=300, y=10, w=60, d=50, h=80,
+                     door="left")]
+        lab = model.build(ROOT, {"rooms": [{"id": "R", "ceiling": 250}], "placeables": rows},
+                          room_polys={"R": [(0, 0), (400, 0), (400, 300), (0, 300)]})
+        return lab, layout.editable(lab, checks.run(lab))
+
+    def test_a_cupboard_inside_something_is_not_waiting_to_be_placed(self):
+        _, svg = self.lab()
+        self.assertNotIn(layout.PREFIX + "HOOD.C1", svg)
+
+    def test_but_equipment_inside_it_still_is(self):
+        _, svg = self.lab()
+        self.assertIn(layout.PREFIX + "PLATE", svg)
+
+    def test_and_once_it_has_a_place_inside_it_is_drawn_there(self):
+        _, svg = self.lab(x=5, y=5)
+        self.assertIn(layout.PREFIX + "PLATE", svg)
+        self.assertNotIn("not placed yet: drag it into place", svg.split(layout.PREFIX + "PLATE")[1][:400])
+
+    def test_a_door_is_drawn_with_its_swing_and_nothing_beside_it(self):
+        from labmap import geometry as G
+
+        lab, svg = self.lab()
+        boxes = G.clear_boxes(lab.placeables["CAB"], 60, 50)
+        self.assertEqual(list(boxes), ["front"])
+        self.assertIn("#d64545", svg)  # the swing in front of CAB, which is a real clearance
+
+
 if __name__ == "__main__":
     unittest.main()

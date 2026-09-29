@@ -142,18 +142,16 @@ class WindowsStacksCeilings(unittest.TestCase):
 class BeforeMeasuring(unittest.TestCase):
     """Doors, fit margin, sprinklers, services needed, keep-apart, socket ratings, door fit."""
 
-    def test_a_blocked_hinge_is_a_warning_not_a_problem(self):
-        """A cupboard in a row of cupboards, or in a corner, still opens to 90 degrees: say so, don't fail it."""
+    def test_nothing_is_kept_clear_beside_a_hinge(self):
+        """Cupboards stand in rows and in corners; a door opening to 90 degrees needs only the swing in front."""
         fridge = dict(x=5, y=100, w=60, d=60, h=180, category="fridge")  # 5 cm from the left wall, facing S
-        self.assertIn(("hinge", ("F",)), found(lab_from([P("F", door="left", **fridge)])))
-        self.assertNotIn(("hinge", ("F",)), found(lab_from([P("F", door="right", **fridge)])))
+        self.assertEqual(found(lab_from([P("F", door="left", **fridge)])), set())
         beside = found(lab_from([P("F", door="left", **fridge),
                                  P("X", x=0, y=100, w=5, d=60, h=180, category="cabinet")]))
-        self.assertIn(("hinge", ("F", "X")), beside)
-        self.assertNotIn(("clear-zone", ("F", "X")), beside)
+        self.assertEqual(beside, set())
 
-    def test_but_a_clearance_you_measured_is_still_a_problem(self):
-        """clear_left on the hinge side is a measurement, not a nicety: blocking it fails as before."""
+    def test_but_a_clearance_you_measured_is_a_problem(self):
+        """clear_left is a measurement, not a nicety: a door that has to open further back is said so explicitly."""
         fridge = dict(x=5, y=100, w=60, d=60, h=180, category="fridge", clear_left=20)
         self.assertIn(("wall-clearance", ("F",)), found(lab_from([P("F", door="left", **fridge)])))
 

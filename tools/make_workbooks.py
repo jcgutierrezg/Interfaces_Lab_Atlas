@@ -123,7 +123,6 @@ SETTINGS = [  # key, value, unit, meaning
     ("grid", 5, "cm", "Raster size for walkways and bench space. Smaller is finer but slower."),
     ("expiry_warning_days", 30, "days", "Warn this long before a document on the documents sheet expires."),
     ("fit_margin", 2, "cm", "Slack for measuring error and ventilation: under a bench, below the ceiling, through a door."),
-    ("door_gap", 10, "cm", "Kept free beside a door's hinge (door column) so it opens past 90 degrees."),
     ("utility_reach", 300, "cm", "How far a gas, water, drain, vacuum, air, network or exhaust point may be (needs column)."),
     ("sprinkler_clearance", 45, "cm", "In rooms with sprinklers, nothing may reach higher than this below the ceiling."),
     ("sash_clearance", 15, "cm", "Work inside a fume hood is kept at least this far behind the sash."),

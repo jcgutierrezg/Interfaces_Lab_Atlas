@@ -155,32 +155,19 @@ def contains(outer, poly):
 
 # --- placement --------------------------------------------------------------------------------------------
 
-DOOR_GAP = 10  # cm beside a door's hinge; the settings sheet's door_gap overrides it in the checks
-
-
-def clear_boxes(r, w, d, door_gap=DOOR_GAP):
+def clear_boxes(r, w, d):
     """Clearance rectangles in the object's own frame: {side: (u0, v0, u1, v1)}.
 
-    A door (door column: hinged left, right or both, as you face it) widens them: its swing in front (the door's
-    width, half each for double doors) and door_gap beside the hinge, so it opens past 90 degrees."""
+    A door (door column: hinged left, right or both, as you face it) widens the one in front by the leaf's width,
+    half of it each side for double doors: the space it sweeps opening to 90 degrees. Nothing is added beside the
+    hinge; a cupboard belongs in a row of cupboards. Where a door has to swing back further than that, measure the
+    room it needs into clear_left or clear_right."""
     c = {k: r.get(f"clear_{k}") or 0 for k in ("front", "back", "left", "right")}
-    door = r.get("door")
-    if door in ("left", "right", "both"):
-        c["front"] = max(c["front"], w / 2 if door == "both" else w)
-        for side in ("left", "right") if door == "both" else (door,):
-            c[side] = max(c[side], door_gap)
+    if r.get("door") in ("left", "right", "both"):
+        c["front"] = max(c["front"], w / 2 if r["door"] == "both" else w)
     boxes = {"front": (0, d, w, d + c["front"]), "back": (0, -c["back"], w, 0),
              "left": (-c["left"], 0, 0, d), "right": (w, 0, w + c["right"], d)}
     return {k: b for k, b in boxes.items() if c[k] > 0}
-
-
-def hinge_sides(r):
-    """The sides whose clearance is only there so a door can open past 90 degrees, rather than something measured.
-    Blocking one means the door still opens to 90, which is enough to use it: worth saying, not a problem."""
-    door = r.get("door")
-    if door not in ("left", "right", "both"):
-        return set()
-    return {side for side in (("left", "right") if door == "both" else (door,)) if not r.get(f"clear_{side}")}
 
 
 def interior(lab, i):

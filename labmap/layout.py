@@ -16,6 +16,7 @@ from pathlib import Path
 
 from . import geometry as G
 from . import svg
+from .model import CONTAINERS
 
 NS_SVG = "http://www.w3.org/2000/svg"
 NS_INK = "http://www.inkscape.org/namespaces/inkscape"
@@ -467,6 +468,13 @@ def _object(lab, i, origin, angle, abs_angle, flagged, unplaced=False, sizes=Non
     return "".join(out)
 
 
+def _contents(r):
+    """A cupboard or drawer inside something is part of it, like the drawers in a pedestal: it holds things, it
+    isn't waiting to be put somewhere. Only a fume hood's working space made these ask to be placed, because that
+    is the one enclosure with the room inside it described."""
+    return r.get("category") in CONTAINERS and (r.get("x") is None or r.get("y") is None)
+
+
 def _room_objects(lab, rid, flagged, sizes=None, lsizes=None, levels=None):
     """(svg of the placed objects, svg of the staging area, extent of everything)."""
     P, room = lab.placeables, lab.rooms[rid]
@@ -640,7 +648,8 @@ def _block(lab, rid):
     poly = _room_poly(lab.rooms[rid])
     x0, y0, x1, y1 = G.bbox(poly)
     ids = [i for i, r in P.items() if r.get("room") == rid and i not in lab.gone
-           and (r.get("mount") in ("floor", "wall", "on", "under") or (r.get("mount") == "in" and G.interior(lab, r.get("parent"))))]
+           and (r.get("mount") in ("floor", "wall", "on", "under")
+                or (r.get("mount") == "in" and G.interior(lab, r.get("parent")) and not _contents(r)))]
 
     def order(i):
         r, pts = P[i], outline(lab, i) or [(0, 0)]
