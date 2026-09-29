@@ -585,6 +585,7 @@ LAYERS = (("floor", "floor and benches"), ("under", "under benches"), ("on", "on
           ("wall", "walls and shelves"))
 LAYOUT_FILE = "labs.svg"
 ROOM_GAP = 150  # cm between rooms in the combined layout
+GRID_CM = 10  # the drawing grid, a metre in bold; every room's origin is put on it so the grid reads in room cm
 STAGE_MIN = (150, 200)  # cm: smallest "not placed yet" area, so there's always somewhere to drag things out to
 MOVE_SHEETS = ("placeables", "services", "equipment")  # what a pull can change
 LAYER_MOUNT = {"floor": "floor", "under": "under", "on": "on"}  # moved to this layer in Inkscape: mounted like this
@@ -704,8 +705,8 @@ def editable(lab, res):
     rooms_svg, layers = [], {k: [] for k, _ in LAYERS}
     for k, b in enumerate(blocks):
         c, row = k % cols, k // cols
-        ox = sum(widths[:c]) + c * ROOM_GAP - b["extent"][0]
-        oy = sum(heights[:row]) + row * ROOM_GAP - b["extent"][1]
+        ox = round((sum(widths[:c]) + c * ROOM_GAP - b["extent"][0]) / GRID_CM) * GRID_CM
+        oy = round((sum(heights[:row]) + row * ROOM_GAP - b["extent"][1]) / GRID_CM) * GRID_CM
         rid = b["rid"]
         parts = []
         if b["shell"] is not None:
@@ -740,14 +741,19 @@ def editable(lab, res):
                 _object(lab, i, (px + ox, py + oy), 0, 0, flagged, unplaced=True, nest=False))
     w = sum(widths) + (cols - 1) * ROOM_GAP
     h = sum(heights) + (len(heights) - 1) * ROOM_GAP
-    help_y, h = h + 20, h + 90
+    help_y, h = h + 20, h + 110
     root = ET.Element(f"{{{NS_SVG}}}svg")
     root.set("width", f"{_n(w)}cm")
     root.set("height", f"{_n(h)}cm")
     root.set("viewBox", f"0 0 {_n(w)} {_n(h)}")
     root.append(ET.fromstring(
         f'<sodipodi:namedview xmlns:sodipodi="{NS_SOD}" xmlns:inkscape="{NS_INK}" id="namedview" pagecolor="#ffffff" '
-        f'bordercolor="#666666" inkscape:document-units="cm" showgrid="false"/>'))
+        f'bordercolor="#666666" inkscape:document-units="cm" showgrid="true" inkscape:snap-global="true" '
+        f'inkscape:snap-grids="true" inkscape:snap-bbox="true" inkscape:bbox-nodes="true" '
+        f'inkscape:snap-nodes="false" inkscape:snap-others="false">'
+        f'<inkscape:grid id="grid-{GRID_CM}cm" type="xygrid" units="cm" originx="0" originy="0" '
+        f'spacingx="{GRID_CM}" spacingy="{GRID_CM}" empspacing="10" color="#3f7fbf" opacity="0.12" '
+        f'empcolor="#3f7fbf" empopacity="0.3" visible="true" enabled="true"/></sodipodi:namedview>'))
     for text in rooms_svg:
         root.append(ET.fromstring(text))
     for key, name in LAYERS:
@@ -762,6 +768,8 @@ def editable(lab, res):
                   "Drop something in a room's 'not placed yet' area to take it out of the layout.",
                   "Rotate in 45° steps (Object › Transform). Hide or lock layers (Layer › Layers and Objects) to reach "
                   "what's underneath.",
+                  f"The grid is {GRID_CM} cm, a metre in bold, and every room's origin sits on it: # shows or hides "
+                  "it, % turns snapping on and off (View › Page Grid, and the toggle at the top right).",
                   "Save, then: python -m labmap check --layout to try it; python -m labmap pull to keep it.")
     root.append(ET.fromstring(
         f'<g xmlns="{NS_SVG}" xmlns:inkscape="{NS_INK}" xmlns:sodipodi="{NS_SOD}" id="layer-help" '
@@ -1053,6 +1061,36 @@ def layout_path(folder):
     return Path(folder) / "build" / "layout" / LAYOUT_FILE
 
 
+VIEW = ("zoom", "cx", "cy", "current-layer", "window-width", "window-height", "window-x", "window-y",
+        "window-maximized", "document-rotation", "showguides")  # the reader's own, not ours
+
+
+def keep_view(text, path):
+    """Carry the old file's <sodipodi:namedview> into the new one, so redrawing the layout doesn't throw away how
+    the reader set Inkscape up. If they had set a grid of their own it wins outright; if the old file predates
+    grids, they get ours, keeping where they were looking and any guides they drew."""
+    if not path.exists():
+        return text
+    try:
+        was = ET.parse(path).getroot().find(f"{{{NS_SOD}}}namedview")
+        root = ET.fromstring(text)
+    except ET.ParseError:
+        return text
+    now = root.find(f"{{{NS_SOD}}}namedview")
+    if was is None or now is None:
+        return text
+    if was.find(f"{{{NS_INK}}}grid") is not None:
+        root.remove(now)
+        root.insert(0, was)
+    else:
+        for a in VIEW:
+            if was.get(f"{{{NS_INK}}}{a}") is not None:
+                now.set(f"{{{NS_INK}}}{a}", was.get(f"{{{NS_INK}}}{a}"))
+        for guide in was.findall(f"{{{NS_SOD}}}guide"):
+            now.append(guide)
+    return ET.tostring(root, encoding="unicode", xml_declaration=True)
+
+
 def write_layouts(lab, res, force=False):
     """Write build/layout/labs.svg with every room. Left alone if it has moves not pulled yet, unless force.
     Returns (path, status)."""
@@ -1067,7 +1105,7 @@ def write_layouts(lab, res, force=False):
             return path, f"kept: it has moves not pulled into lab-data.xlsx yet ({', '.join(names[:6])}" + \
                          (" ..." if len(names) > 6 else "") + ")"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(editable(lab, res), encoding="utf-8")
+    path.write_text(keep_view(editable(lab, res), path), encoding="utf-8")
     for rid in lab.rooms:  # one file per room, from before the combined layout: out of date now
         (path.parent / f"{rid}.svg").unlink(missing_ok=True)
     return path, "written"

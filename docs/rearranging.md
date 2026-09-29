@@ -10,6 +10,14 @@ python -m labmap pull            # keeps it: writes it into lab-data.xlsx (or do
 python -m labmap xy BENCH-11.B   # where its corners are, and the x, y that puts one where you measured it
 ```
 
+The layout is drawn at real scale with a **10 cm grid**, a metre in bold, and every room's origin sits on a grid
+line, so a grid square is 10 cm in room coordinates wherever you are. Snapping to it is on: drag a bench and its
+bounding box lands on round centimetres. In Inkscape, `#` shows or hides the grid and `%` turns snapping on and
+off (View › Page Grid, and the snapping toggle at the top right).
+
+Whatever you change there — grid spacing, snapping, zoom — is kept when the layout is redrawn: the file's
+`namedview` is carried over from the old one.
+
 **One file, every room.** `labs.svg` has all the rooms side by side, each with its own *not placed yet* area, so
 equipment can be reorganised across labs as easily as across a bench. It replaces the per-room files: one drawing
 means nothing to keep in sync. Zoom to a room with the mouse wheel, or `5` to fit the whole drawing.

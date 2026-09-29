@@ -1,4 +1,5 @@
 """Layouts: generate, edit the SVG the way Inkscape does, read the moves back, write them to the workbook."""
+import re
 import shutil
 import tempfile
 import unittest
@@ -314,6 +315,58 @@ class Levels(unittest.TestCase):
         self.assertIn('data-s="OUT-07" data-e="STRIP-05"', layer)  # a strip's feed
         self.assertEqual(layer.count('data-s="OUT-01"'), 4)  # a line per device plugged in
         self.assertNotIn("svc-OUT-08", layer)  # LAB-B's
+
+
+class Grid(unittest.TestCase):
+    """The drawing grid: 10 cm, every room's origin on it, and the reader's own namedview kept on a rewrite."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        for name in ("lab-data.xlsx", "rooms", "shapes"):
+            src = ROOT / "example" / name
+            (shutil.copytree if src.is_dir() else shutil.copy2)(src, self.tmp / name)
+        self.lab = model.load(self.tmp)
+        self.path = layout.write_layouts(self.lab, checks.run(self.lab))[0]
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_the_file_has_a_grid_and_snapping(self):
+        view = ET.parse(self.path).getroot().find("{http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd}namedview")
+        self.assertEqual(view.get("showgrid"), "true")
+        grid = view.find("{http://www.inkscape.org/namespaces/inkscape}grid")
+        self.assertEqual(grid.get("spacingx"), str(layout.GRID_CM))
+        self.assertEqual(grid.get("units"), "cm")
+        self.assertEqual(view.get("{http://www.inkscape.org/namespaces/inkscape}snap-global"), "true")
+
+    def test_room_origins_sit_on_the_grid(self):
+        """Otherwise a grid square wouldn't be 10 cm of room in every room."""
+        rooms = layout.read_layout(self.path)[1]
+        self.assertTrue(rooms)
+        for rid, room in rooms.items():
+            for k in (4, 5):  # the translation of the room frame -> document matrix
+                self.assertAlmostEqual(room["m"][k] % layout.GRID_CM, 0, places=6, msg=f"{rid} {room['m']}")
+
+    def test_a_rewrite_keeps_the_readers_view(self):
+        t = self.path.read_text(encoding="utf-8")
+        self.path.write_text(t.replace('spacingx="10"', 'spacingx="25"').replace('showgrid="true"',
+                                                                                 'showgrid="false"'), encoding="utf-8")
+        layout.write_layouts(self.lab, checks.run(self.lab), force=True)
+        after = self.path.read_text(encoding="utf-8")
+        self.assertIn('spacingx="25"', after)
+        self.assertIn('showgrid="false"', after)
+        self.assertIn("obj-BENCH-01", after)  # ...and it is still a freshly drawn layout
+
+    def test_a_layout_from_before_grids_gets_one(self):
+        """Older layouts have a namedview with no grid: give them ours, but keep where they were looking."""
+        t = self.path.read_text(encoding="utf-8")
+        t = re.sub(r"<inkscape:grid[^>]*/>", "", t).replace(
+            '<sodipodi:namedview id="namedview"', '<sodipodi:namedview id="namedview" inkscape:zoom="0.42"')
+        self.path.write_text(t, encoding="utf-8")
+        layout.write_layouts(self.lab, checks.run(self.lab), force=True)
+        after = self.path.read_text(encoding="utf-8")
+        self.assertIn('spacingx="10"', after)
+        self.assertIn('inkscape:zoom="0.42"', after)
 
 
 if __name__ == "__main__":
