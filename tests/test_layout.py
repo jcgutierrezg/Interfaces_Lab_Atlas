@@ -407,6 +407,17 @@ class PaintOrder(unittest.TestCase):
         svg = self.drawing(ped_h=200)  # a cabinet standing in front of the bench, not under it
         self.assertGreater(self.at(svg, "PED"), self.at(svg, "RUN"))
 
+    def test_what_the_bench_hides_is_traced_back_on_top(self):
+        """Painted first, a pedestal would vanish under the bench: a dashed, fill-less outline says it's there."""
+        svg = self.drawing()
+        self.assertIn('<g class="ghost lv-floor"', svg)
+        self.assertIn("PED", svg[svg.find('<g class="ghost'):])
+        self.assertGreater(svg.find('<g class="ghost'), self.at(svg, "SMU"))  # over everything, so it shows
+        self.assertIn('fill="none"', svg[svg.find('<g class="ghost'):])  # ...but doesn't hide what's on the bench
+
+    def test_nothing_is_traced_when_nothing_is_hidden(self):
+        self.assertNotIn('class="ghost', self.drawing(ped_h=200))
+
 
 class Contents(unittest.TestCase):
     """What's inside something: a hood's cupboards are part of it, a hotplate in it is a thing to be placed."""

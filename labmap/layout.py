@@ -40,6 +40,8 @@ MAP_CSS = """.map g.hover > .fp { fill: #ffe58f; fill-opacity: 1; stroke: #1f4e7
 .map[data-view="floor"] g[id^="obj-"]:not(.lv-floor) > text, .map[data-view="bench"] g[id^="obj-"]:not(.lv-bench) > text,
 .map[data-view="wall"] g[id^="obj-"]:not(.lv-wall) > text { display: none; }
 .map[data-view="floor"] g.lv-floor > .fp[fill="none"] { fill: #e8eef5; }  /* under a bench: solid when in focus */
+.map[data-view="floor"] g.ghost:not(.lv-floor), .map[data-view="bench"] g.ghost:not(.lv-bench),
+.map[data-view="wall"] g.ghost:not(.lv-wall) { opacity: 0.15; }  /* traced outlines fade with what they trace */
 .map:not([data-view]) .lb-level, .map[data-view="all"] .lb-level,
 .map[data-view="floor"] .lb-all, .map[data-view="bench"] .lb-all, .map[data-view="wall"] .lb-all { display: none; }
 .levels .sep { width: 1px; background: #d1d9e0; margin: 0 4px; }
@@ -484,7 +486,32 @@ def _tall(lab, i):
     return r.get("h") or 0
 
 
-def _room_objects(lab, rid, flagged, sizes=None, lsizes=None, levels=None):
+def hidden_under(lab, res, rid):
+    """Floor-standing things a bench (or anything else) is drawn over: a pedestal parked in its leg room. Painted
+    from the ground up they disappear, so the room drawing traces them back on top."""
+    from .checks import tucked_under
+
+    if res is None or not getattr(res, "geo", None):
+        return []
+    here = [i for i, g in res.geo.items() if g and g.poly and g.room == rid]
+    return [i for i in here if i in tucked_under(lab.placeables, res.geo, here)]
+
+
+def _ghost(lab, i, levels=None):
+    """A dashed outline of something hidden under a bench, with no fill, so what stands on the bench still shows.
+    It carries the object's own level, so the directory's level buttons fade it with the thing it traces."""
+    m, pts = abs_matrix(lab, i), outline(lab, i)
+    if m is None or not pts:
+        return ""
+    r = lab.placeables[i]
+    lv = f" lv-{levels[i]}" if levels and i in levels else ""
+    return (f'<g class="ghost{lv}" pointer-events="none"><title>{esc(i)}'
+            f'{" · " + esc(r["name"]) if r.get("name") else ""} · under what is drawn over it</title>'
+            f'<polygon points="{_pts([_apply(m, p) for p in pts])}" fill="none" stroke="#6b7280" '
+            f'stroke-width="0.9" stroke-dasharray="4 3" stroke-opacity="0.8"/></g>')
+
+
+def _room_objects(lab, rid, flagged, sizes=None, lsizes=None, levels=None, ghosts=()):
     """(svg of the placed objects, svg of the staging area, extent of everything)."""
     P, room = lab.placeables, lab.rooms[rid]
     poly = room.get("poly") or [(0, 0), (room.get("width") or 500, 0),
@@ -504,6 +531,7 @@ def _room_objects(lab, rid, flagged, sizes=None, lsizes=None, levels=None):
         lt = local_transform(lab, i)
         (placed if lt else staged).append((i, lt))
     body = [_object(lab, i, lt[0], lt[1], lt[1], flagged, sizes=sizes, lsizes=lsizes, levels=levels) for i, lt in placed]
+    body += [_ghost(lab, i, levels) for i in ghosts]
     sx, sy, sw = x1 + STAGE_GAP, y0 + 25, 0
     for i, _ in staged:
         pts = outline(lab, i)
@@ -592,7 +620,8 @@ def drawing(lab, res, rid, flag=True):
     lsizes = {}
     for lv in LEVELS:
         lsizes.update(label_plan(lab, res, rid, LABEL_MIN["map"], only={i for i, v in levels.items() if v == lv}))
-    body, _, _, poly = _room_objects(lab, rid, flagged, label_plan(lab, res, rid, LABEL_MIN["map"]), lsizes, levels)
+    body, _, _, poly = _room_objects(lab, rid, flagged, label_plan(lab, res, rid, LABEL_MIN["map"]), lsizes, levels,
+                                     ghosts=hidden_under(lab, res, rid))
     x0, y0, x1, y1 = G.bbox(poly)
     vb = f"{_n(x0 - 20)} {_n(y0 - 20)} {_n(x1 - x0 + 40)} {_n(y1 - y0 + 40)}"
     return (f'<svg xmlns="{NS_SVG}" viewBox="{vb}" style="width:100%;height:auto;max-height:80vh" role="img">'
