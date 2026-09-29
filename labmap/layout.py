@@ -476,6 +476,14 @@ def _contents(r):
     return r.get("category") in CONTAINERS and (r.get("x") is None or r.get("y") is None)
 
 
+def _tall(lab, i):
+    """How high something reaches, for deciding what is drawn over what. A group is as tall as its tallest part."""
+    r = lab.placeables[i]
+    if r.get("shape") == "group":
+        return max((lab.placeables[c].get("h") or 0 for c in lab.children.get(i, [])), default=0)
+    return r.get("h") or 0
+
+
 def _room_objects(lab, rid, flagged, sizes=None, lsizes=None, levels=None):
     """(svg of the placed objects, svg of the staging area, extent of everything)."""
     P, room = lab.placeables, lab.rooms[rid]
@@ -485,9 +493,11 @@ def _room_objects(lab, rid, flagged, sizes=None, lsizes=None, levels=None):
     top = [i for i, r in P.items() if r.get("room") == rid and not r.get("parent") and r.get("mount") in ("floor", "wall")]
 
     def order(i):
+        """Painted from the ground up, as you'd see them from above: something standing in a bench's leg room is
+        drawn before the bench, so the bench and what stands on it are not hidden behind a pedestal."""
         r, pts = P[i], outline(lab, i) or [(0, 0)]
         z = r.get("z") or 0 if r.get("mount") == "wall" else 0
-        return (z >= OVERHEAD, z, -abs(G.area(pts)) if len(pts) > 2 else 0)
+        return (z >= OVERHEAD, z, _tall(lab, i), -abs(G.area(pts)) if len(pts) > 2 else 0)
 
     placed, staged, stage = [], [], []
     for i in sorted(top, key=order):

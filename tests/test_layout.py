@@ -379,6 +379,35 @@ class Grid(unittest.TestCase):
         self.assertIn('inkscape:zoom="0.42"', after)
 
 
+class PaintOrder(unittest.TestCase):
+    """The room drawing is painted from the ground up, so nothing low hides what stands on a bench."""
+
+    def drawing(self, ped_h=80):
+        rows = [dict(id="RUN", room="R", mount="floor", x=0, y=0, shape="group", category="bench"),
+                dict(id="RUN.A", room="R", parent="RUN", mount="part", x=0, y=0, w=200, d=80, h=90,
+                     free_under=85, category="bench"),
+                dict(id="SMU", room="R", parent="RUN.A", mount="on", x=20, y=10, w=40, d=40, h=20,
+                     category="power-supply"),
+                dict(id="PED", room="R", mount="floor", x=30, y=15, w=50, d=50, h=ped_h, category="pedestal")]
+        lab = model.build(ROOT, {"rooms": [{"id": "R", "ceiling": 250}], "placeables": rows},
+                          room_polys={"R": [(0, 0), (400, 0), (400, 300), (0, 300)]})
+        return layout.drawing(lab, checks.run(lab), "R")
+
+    def at(self, svg, i):
+        n = svg.find(f'id="{layout.PREFIX}{i}"')
+        self.assertNotEqual(n, -1, f"{i} isn't in the drawing")
+        return n
+
+    def test_a_pedestal_under_a_bench_is_painted_before_it(self):
+        svg = self.drawing()
+        self.assertLess(self.at(svg, "PED"), self.at(svg, "RUN"))
+        self.assertLess(self.at(svg, "RUN"), self.at(svg, "SMU"))  # ...and what's on the bench is painted last
+
+    def test_something_taller_than_the_bench_is_painted_after_it(self):
+        svg = self.drawing(ped_h=200)  # a cabinet standing in front of the bench, not under it
+        self.assertGreater(self.at(svg, "PED"), self.at(svg, "RUN"))
+
+
 class Contents(unittest.TestCase):
     """What's inside something: a hood's cupboards are part of it, a hotplate in it is a thing to be placed."""
 
