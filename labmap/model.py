@@ -98,6 +98,7 @@ class Lab:
     saved: object = None  # when lab-data.xlsx was last saved: the fallback "last seen" date
     settings: dict = field(default_factory=lambda: dict(SETTINGS))
     issues: list = field(default_factory=list)
+    stale: list = field(default_factory=list)  # (sheet, row, column, label) of formulas with no stored result
     _profiles: dict = field(default_factory=dict, repr=False)
     _children: dict | None = field(default=None, repr=False)
 
@@ -230,13 +231,16 @@ def _arithmetic(expr):
 
 def write_moves(path, moves, backup_dir):
     """Write {sheet: {id: {column: value}}} into the workbook after copying it to backup_dir. Only those cells
-    change; validation, formatting and comments are kept. Returns (backup path, ids not found)."""
+    change; validation, formatting and comments are kept. Returns (backup path, ids not found, formulas), where
+    formulas is ([(id, column, formula) replaced by a number], how many formulas are left in the workbook).
+    Saving from here drops every formula's stored result, so a workbook with formulas has to be opened and saved
+    in Excel before it is read again."""
     import shutil
     from openpyxl import load_workbook
 
     path, backup_dir = Path(path), Path(backup_dir)
     wb = load_workbook(path)
-    missing = []
+    missing, replaced = [], []
     for sheet, changes in moves.items():
         if not changes:
             continue
@@ -254,12 +258,17 @@ def write_moves(path, moves, backup_dir):
                 continue
             for k, v in change.items():
                 if k in col:
+                    was = ws.cell(n, col[k]).value
+                    if isinstance(was, str) and was.startswith("="):
+                        replaced.append((i, k, was))
                     ws.cell(n, col[k]).value = v
+    left = sum(isinstance(c.value, str) and c.value.startswith("=")
+               for ws in wb.worksheets for row in ws.iter_rows() for c in row)
     backup_dir.mkdir(parents=True, exist_ok=True)
     backup = backup_dir / f"lab-data-{dt.datetime.now():%Y%m%d-%H%M%S}.xlsx"
     shutil.copy2(path, backup)
     wb.save(path)
-    return backup, missing
+    return backup, missing, (replaced, left)
 
 
 def _clean(v):
@@ -312,6 +321,7 @@ def _normalise(lab, sheet, r):
     for col in r.pop("_formulas", []):
         lab.issue(f"{where}: the formula in {col} has no stored result. Open lab-data.xlsx in Excel and save it once",
                   [r["id"]] if r.get("id") else [])
+        lab.stale.append((sheet, r.get("_row"), col, label(sheet, r)))
     for k, v in list(r.items()):
         if k == "_row" or v is None:
             continue

@@ -827,6 +827,14 @@ def count(moves):
     return sum(len(v) for v in moves.values())
 
 
+def _same(a, b):
+    """Two coordinates are the same spot. Either can be missing: a row half filled in, or a formula that read
+    blank, is not the same as a position in the drawing."""
+    if a is None or b is None:
+        return a is None and b is None
+    return abs(a - b) < 0.6
+
+
 def moves_from(lab, mats, rooms, layers=None):
     """({"placeables": {id: {column: value}}, "services": ..., "equipment": ...}, [notes]): what the layout says
     has changed.
@@ -989,8 +997,7 @@ def moves_from(lab, mats, rooms, layers=None):
         faces = None if v["faces"] == "S" and not r.get("faces") else v["faces"]
         if v["x"] is None:
             faces = r.get("faces")
-        same_xy = (v["x"] is None and r.get("x") is None) or (v["x"] is not None and r.get("x") is not None
-                                                             and abs(v["x"] - r["x"]) < 0.6 and abs(v["y"] - r["y"]) < 0.6)
+        same_xy = all(_same(v[k], r.get(k)) for k in ("x", "y"))
         change = {k: v[k] for k in ("parent", "mount", "room") if v[k] != r.get(k)}
         if same_xy and not change and (faces or "S") == (r.get("faces") or "S"):
             continue

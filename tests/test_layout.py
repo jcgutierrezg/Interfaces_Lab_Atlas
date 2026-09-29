@@ -37,6 +37,16 @@ class RoundTrip(unittest.TestCase):
         self.assertEqual(changes, {}, "every edited object should be in the layout")
         tree.write(self.path)
 
+    def test_a_row_whose_position_reads_blank_is_a_move_not_a_crash(self):
+        """A formula with no stored result (what openpyxl leaves behind) reads as blank: SPEC-02 has an x but
+        no y. It used to raise TypeError in the middle of pull, after the workbook had been written."""
+        lab = model.load(self.tmp, {"placeables": {"SPEC-02": {"y": None}}})
+        moves, _ = layout.layout_moves(lab)
+        self.assertIn("SPEC-02", moves["placeables"])
+        self.assertIsNotNone(moves["placeables"]["SPEC-02"]["y"])  # the drawing still knows where it is
+        fixed = model.load(self.tmp, {"placeables": {"BENCH-01": {"y": None}}})  # fixed = yes: left alone, quietly
+        self.assertNotIn("BENCH-01", layout.layout_moves(fixed)[0]["placeables"])
+
     def relayer(self, i, key):
         """Move i to another layer, like Layer › Move Selection to Layer Above / Below in Inkscape."""
         tree = ET.parse(self.path)
@@ -237,7 +247,7 @@ class RoundTrip(unittest.TestCase):
         lab = model.load(self.tmp)
         path, status = layout.write_layouts(lab, checks.run(lab))  # moves not pulled yet: must not overwrite
         self.assertIn("kept", status)
-        backup, missing = model.write_moves(self.tmp / "lab-data.xlsx", moves, self.tmp / "build" / "backups")
+        backup, missing, _ = model.write_moves(self.tmp / "lab-data.xlsx", moves, self.tmp / "build" / "backups")
         self.assertTrue(backup.exists())
         self.assertEqual(missing, [])
         lab = model.load(self.tmp)

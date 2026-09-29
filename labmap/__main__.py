@@ -112,6 +112,10 @@ def _layout(args):
     lab = _load(data_folder(args.folder))
     if lab is None:
         return 2
+    stale = [s for s in lab.stale if s[0] in layout.MOVE_SHEETS]
+    if stale:
+        print(f"Careful: {len(stale)} cell(s) hold a formula with no stored result, so they read as blank and what "
+              f"they place lands in 'not placed yet'. Open lab-data.xlsx in Excel and save it, then draw again.")
     path, status = layout.write_layouts(lab, checks.run(lab), force=args.force)
     print(f"All rooms: {status}  {path.resolve()}")
     if args.open:
@@ -129,6 +133,16 @@ def _pull(args):
     lab = _load(folder)
     if lab is None:
         return 2
+    stale = [s for s in lab.stale if s[0] in layout.MOVE_SHEETS]
+    if stale:
+        print(f"Not pulling: {len(stale)} cell(s) hold a formula with no stored result, so they read as blank and "
+              f"pull would write the drawing's numbers over the formulas.")
+        for sheet, row, col, name in stale[:8]:
+            print(f"  {name}: {col} ({sheet} row {row})")
+        if len(stale) > 8:
+            print(f"  ... and {len(stale) - 8} more")
+        print("Open lab-data.xlsx in Excel, save it (that stores the results), then run pull again.")
+        return 2
     moves, notes = layout.layout_moves(lab)
     _print_moves(lab, moves, notes)
     n = layout.count(moves)
@@ -139,23 +153,30 @@ def _pull(args):
         print(f"{n} change(s); nothing written (--dry-run).")
         return 0
     before = checks.run(lab)
+    moved = _load(folder, moves)  # the result, worked out before writing: the file's own formulas read blank after
+    if moved is None:
+        return 2
     try:
-        backup, missing = model.write_moves(folder / "lab-data.xlsx", moves, folder / "build" / "backups")
+        backup, missing, (replaced, formulas) = model.write_moves(folder / "lab-data.xlsx", moves,
+                                                                  folder / "build" / "backups")
     except PermissionError:
         print("Couldn't write lab-data.xlsx: close it in Excel (and let OneDrive finish syncing), then run pull again.")
         return 2
     print(f"{n - len(missing)} change(s) written to lab-data.xlsx. Backup: {backup.resolve()}")
-    lab = _load(folder)
-    if lab is None:
-        return 2
-    after = checks.run(lab)
+    for i, col, formula in replaced:
+        print(f"  note: {i}'s {col} was the formula {formula}; the drawing's number replaced it")
+    after = checks.run(moved)
     stamp = dt.datetime.now()
     sheet = report.write_move_list(folder / "build" / "move-lists" / f"move-list-{stamp:%Y%m%d-%H%M}.html",
                                    before, after, moves, f"Pulled {stamp:%Y-%m-%d %H:%M} from {folder.resolve().name}")
     print(f"Move list to print: {sheet.resolve()}")
-    layout.write_layouts(lab, after)
+    layout.write_layouts(moved, after, force=True)
     print("Layout redrawn to match. If it's open in Inkscape, use File › Revert to see the new version.")
-    print("Now run `python -m labmap check` to see the result.")
+    if formulas:
+        print(f"Open lab-data.xlsx in Excel and save it once before anything else: it has {formulas} formula(s), "
+              f"and writing from here leaves them without a stored result, so they read as blank.")
+    else:
+        print("Now run `python -m labmap check` to see the result.")
     return 0
 
 
