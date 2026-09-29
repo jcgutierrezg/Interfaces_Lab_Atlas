@@ -364,6 +364,30 @@ class Data(unittest.TestCase):
         self.assertIn("Y has only one of x and y", messages)
 
 
+class AcrossAJoin(unittest.TestCase):
+    """A bench or a sill made of parts is one surface: something can stand across the join between two of them."""
+
+    def off_parent(self, x, w=40, **second):
+        rows = [P("RUN", x=0, y=0, shape="group"),
+                P("RUN.A", "part", "RUN", x=0, y=0, w=100, d=60, h=90, free_under=85),
+                P("RUN.B", "part", "RUN", x=100, y=0, w=100, d=60, free_under=85, **{"h": 90, **second}),
+                P("BOX", "on", "RUN.A", category="container", x=x, y=10, w=w, d=30, h=20)]
+        return {f for f in found(lab_from(rows)) if f[0] == "off-parent"}
+
+    def test_a_box_wholly_on_its_own_part(self):
+        self.assertEqual(self.off_parent(10), set())
+
+    def test_a_box_across_the_join(self):
+        self.assertEqual(self.off_parent(80), set())  # 80..120, over both parts of the run
+
+    def test_a_box_off_the_end_of_the_run(self):
+        self.assertEqual(self.off_parent(180), {("off-parent", ("BOX", "RUN.A"))})
+
+    def test_the_next_part_has_to_be_the_same_surface(self):
+        """A lower part of the same bench holds nothing up: the box is over thin air past the join."""
+        self.assertEqual(self.off_parent(80, h=75), {("off-parent", ("BOX", "RUN.A"))})
+
+
 class TuckedUnder(unittest.TestCase):
     """A pedestal parked under a bench needs room to open its drawers, not room to stand: the bench top above it
     isn't in its way. Two benches side by side, and a pedestal under the join between them."""

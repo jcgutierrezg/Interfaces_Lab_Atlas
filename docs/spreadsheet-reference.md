@@ -118,6 +118,12 @@ front, clearance and drawers.
 The inside corner of an L is a dead zone by design, so one leg's clearance running into the other leg (or into
 what stands on it) isn't reported as a problem.
 
+A run of parts is **one continuous surface**: something on one leg may hang across the join onto the next, as a
+cupboard does on a window sill that turns a corner. Put it on the part that holds most of it, with an `x` that can
+run past the part's own length (or be negative), and it counts as supported as long as the rest of it lands on
+another part of the same group whose top is at the same height. Hanging over the end of the run, or over a part
+that is lower, is still reported.
+
 **Bench following a chamfered corner** (from the example): the straight runs and the diagonal piece are parts of
 one group. The diagonal piece is an ordinary rectangle facing `SW` (or `NE`, `SE`, `NW`).
 

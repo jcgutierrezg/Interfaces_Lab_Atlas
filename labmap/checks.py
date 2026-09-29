@@ -24,7 +24,10 @@ STACKABLE = {"bench", "optical-table", "desk", "table", "shelf", "cabinet", "car
 RULES = {  # rule: (title, what it means, level). {placeholders} are settings.
     "data": ("Data problems", "Rows the checks couldn't use as they are. Fix these first: they can hide other problems.", "problem"),
     "outside-room": ("Outside the room", "The footprint crosses the room's outline.", "problem"),
-    "off-parent": ("Off its support", "Sits on or under something but sticks out of it.", "problem"),
+    "off-parent": ("Off its support", "Sits on or under something but sticks out of it, and of the rest of the run "
+                                      "it belongs to: parts of one bench or sill at the same height count as one "
+                                      "surface, so something can stand across the join between two of them.",
+                   "problem"),
     "under-fit": ("Doesn't fit underneath", "Taller than the free space under its parent less {fit_margin} cm of slack, "
                                             "or the parent has no free_under.", "problem"),
     "in-fit": ("Doesn't fit inside", "Taller than the working space inside its fume hood (or other enclosure), less "
@@ -155,6 +158,37 @@ def tucked_under(P, geo, ids):
     return out
 
 
+def _surface(P, geo, j, mount):
+    """The height of the face something rests on (or hangs under), or None if j offers none."""
+    g = geo.get(j)
+    if g is None or not g.poly:
+        return None
+    if mount == "on":
+        return g.z[1]
+    fu = P[j].get("free_under")
+    return None if fu is None else g.z[0] + fu
+
+
+def supported(P, geo, i, parent):
+    """Whether i is held up (or hangs under) its parent, or the run of parts the parent belongs to.
+
+    A bench or a sill made of parts is one continuous surface, so something can perfectly well stand across the
+    join between two of them, as a cupboard does on a window sill that turns a corner. It has to be the same
+    surface: the other parts of the same group, with their tops (or undersides) at the same height.
+    """
+    g, mount = geo[i], P[i].get("mount")
+    if G.contains(geo[parent].poly, g.poly):
+        return True
+    top = _surface(P, geo, parent, mount)
+    group = P[parent].get("parent")
+    if top is None or not group or P[parent].get("mount") != "part":
+        return False
+    run = [geo[j].poly for j, r in P.items()
+           if r.get("mount") == "part" and r.get("parent") == group and geo.get(j) and geo[j].poly
+           and _surface(P, geo, j, mount) is not None and abs(_surface(P, geo, j, mount) - top) <= G.EPS]
+    return all(any(G.inside(spot, poly) for poly in run) for spot in _probes(g.poly))
+
+
 def zones(r, g, person=200, headroom=None):
     """[(side, polygon, height band)] of the space an object needs kept free."""
     zr = (0, headroom if headroom is not None else person) if r.get("mount") in ("floor", "wall", "part") else g.z
@@ -212,8 +246,9 @@ def _geometry(res):
             if outline and not G.contains(outline, g.poly):
                 res.add("outside-room", f"{i} is partly outside {rid}", [i], rid)
             pg = geo.get(parent)
-            if r.get("mount") in ("on", "under") and pg and pg.poly and not G.contains(pg.poly, g.poly):
-                res.add("off-parent", f"{i} sticks out of {parent}", [i, parent], rid)
+            if r.get("mount") in ("on", "under") and pg and pg.poly and not supported(P, geo, i, parent):
+                run = " (or the rest of " + P[parent]["parent"] + ")" if P[parent].get("mount") == "part" else ""
+                res.add("off-parent", f"{i} sticks out of {parent}{run}", [i, parent], rid)
             if r.get("mount") == "in" and pg:
                 inside = G.interior_poly(lab, parent, pg)
                 inner_h = G.interior(lab, parent)[4]
