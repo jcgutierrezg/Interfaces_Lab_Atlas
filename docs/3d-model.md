@@ -21,6 +21,13 @@ is hiding behind what, and to show the room to someone who has never been in it.
 
 A few deliberate choices:
 
+- **Benches float.** Anything with `free_under` is drawn as its top alone, hanging at the height its leg room
+  ends, so you can see the pedestals, freezers and bins parked underneath — which is most of what you want to look
+  at from inside the room.
+- **The colours are the plan's, deepened.** Same hue, darker and a little more saturated, because a viewer has no
+  black outlines and adds its own light, which turns the drawings' pastels into one undifferentiated off-white. A
+  few categories whose plan colour is nearly white, such as doors and windows, are given a colour of their own.
+  Each face also carries its own shade, lightest on top, so edges read as edges.
 - **Walls stop at 120 cm** so you can look in from any angle. `--walls 250` for full height (you then have to put
   the camera inside), `--walls 0` for a floor plate and no walls.
 - **Doors and windows are objects**, so they appear as panels where the wall is, not as holes cut in it. Cutting
