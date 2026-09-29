@@ -120,7 +120,24 @@ def _recalculate(book):
     return book.replace("</workbook>", '<calcPr calcId="191029" fullCalcOnLoad="1"/></workbook>')
 
 
-def write_cells(path, changes):
+def defined_names(path):
+    """The names a workbook defines, such as the L_category a dropdown reads its values from."""
+    with zipfile.ZipFile(path) as z:
+        book = z.read("xl/workbook.xml").decode("utf-8")
+    return {m.group(1) for m in re.finditer(r'<definedName\b[^>]*\bname="([^"]+)"', book)}
+
+
+def _rename(book, names):
+    """Point defined names ({name: 'lists!$A$2:$A$46'}) somewhere else: a dropdown's range as its list grows."""
+    for name, ref in names.items():
+        book, n = re.subn(r'(<definedName\b[^>]*\bname="%s"[^>]*>)[^<]*(</definedName>)' % re.escape(name),
+                          lambda m: m.group(1) + ref + m.group(2), book, count=1)
+        if not n:
+            raise Unsupported(f"this workbook has no defined name {name}")
+    return book
+
+
+def write_cells(path, changes, names=None):
     """Set {sheet name: {cell ref: value}} in place. Returns ({(sheet, ref): the formula it replaced}, how many
     formulas the workbook still holds).
 
@@ -142,11 +159,15 @@ def write_cells(path, changes):
                 if was:
                     replaced[(sheet, ref)] = was
             edited[parts[sheet]] = xml.encode("utf-8")
-        formulas = 0
+        formulas, book = 0, None
         if edited:  # a number written over a cell other formulas read leaves their stored results out of date
-            edited["xl/workbook.xml"] = _recalculate(z.read("xl/workbook.xml").decode("utf-8")).encode("utf-8")
+            book = _recalculate(z.read("xl/workbook.xml").decode("utf-8"))
             formulas = sum(z.read(p).count(b"<f>") + z.read(p).count(b"<f ")  # not <formula1>, from validation
                            for p in parts.values())
+        if names:
+            book = _rename(book if book is not None else z.read("xl/workbook.xml").decode("utf-8"), names)
+        if book is not None:
+            edited["xl/workbook.xml"] = book.encode("utf-8")
         raw = {n: z.read(n) for n in z.namelist()}
     work = Path(tempfile.mkdtemp())
     try:

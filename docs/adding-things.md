@@ -127,5 +127,15 @@ where the form itself is kept. Expired is a problem; pending or about to expire,
 
 - A category, plan, service type...: on the `lists` sheet, **insert** a row inside that list (not after its last
   entry) so the dropdown grows with it.
+- **Values added to the blank template** since your workbook was made (a new category, say) come across with
+
+  ```
+  python -m labmap lists
+  ```
+
+  It adds what your lists sheet hasn't got, stretches each dropdown's range over the new rows, leaves values of
+  your own alone, and backs the workbook up to `build/backups/` first. `--source` takes a different workbook to
+  copy from. Until you run it, a row using a value your workbook doesn't know is reported as *"category = 'x'
+  isn't on the category list"*.
 - Two kinds of things that must be kept apart: a row on the `keep_apart` sheet (`tag`, `away_from`, `distance`,
   `level`), and those tags in the `tags` column of the objects concerned.

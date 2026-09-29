@@ -1,4 +1,4 @@
-"""Command line: python -m labmap <check | layout | pull | site | xy> [folder]
+"""Command line: python -m labmap <check | layout | pull | site | xy | lists> [folder]
 
 The folder is the one holding lab-data.xlsx (with rooms/, shapes/, sops/, photos/ beside it). Without one, the
 folder named in labmap.ini (next to this package) is used, e.g. a synced Teams or OneDrive folder; failing that,
@@ -181,6 +181,35 @@ def _pull(args):
     return 0
 
 
+def _lists(args):
+    """Copy list values the blank template has gained (a new category, say) into this workbook's lists sheet."""
+    folder = data_folder(args.folder)
+    source = Path(args.source) if args.source else CONFIG.parent / "lab-data.xlsx"
+    target = folder / "lab-data.xlsx"
+    if not source.exists():
+        print(f"No workbook to copy from at {source.resolve()}")
+        return 2
+    if not target.exists():
+        print(f"No lab-data.xlsx in {folder.resolve()}")
+        return 2
+    if source.resolve() == target.resolve():
+        print("That's the same workbook: give me the folder holding your data, or --source.")
+        return 2
+    try:
+        added = model.sync_lists(target, source, folder / "build" / "backups")
+    except PermissionError:
+        print("Couldn't write lab-data.xlsx: close it in Excel (and let OneDrive finish syncing), then try again.")
+        return 2
+    if not added:
+        print(f"Nothing to add: the lists in {target.name} already have everything {source.name} offers.")
+        return 0
+    for name, values in sorted(added.items()):
+        print(f"  {name}: {', '.join(str(v) for v in values)}")
+    print(f"Added to the lists sheet of {target.resolve()}, dropdowns stretched to match. A backup went to "
+          f"{(folder / 'build' / 'backups').resolve()}.")
+    return 0
+
+
 def _xy(args):
     """Where an object's corners are, and what x, y would put a corner on a spot you measured."""
     from . import geometry as G
@@ -300,6 +329,11 @@ def main(argv=None):
     pl.add_argument("folder", nargs="?", help=folder_help)
     pl.add_argument("--dry-run", action="store_true", help="show the changes without writing them")
     pl.set_defaults(run=_pull)
+    ls = sub.add_parser("lists", help="copy list values the blank template has gained (a new category, say) into "
+                                      "your workbook's lists sheet, dropdowns included")
+    ls.add_argument("folder", nargs="?", help=folder_help)
+    ls.add_argument("--source", help="the workbook to copy from (default: the blank lab-data.xlsx beside labmap)")
+    ls.set_defaults(run=_lists)
     xy = sub.add_parser("xy", help="where an object's corners are, and the x, y that puts a corner where you "
                                    "measured it")
     xy.add_argument("id", help="the id on the placeables sheet, e.g. BENCH-02 or BENCH-02.B")

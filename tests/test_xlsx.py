@@ -41,9 +41,9 @@ def ref_of(path, id, column, sheet=SHEET):
         wb.close()
 
 
-def put_raw(path, ref, xml):
+def put_raw(path, ref, xml, sheet=SHEET):
     """Drop a cell straight into the sheet, the way Excel writes one: a formula with its stored result."""
-    name = part(path)
+    name = part(path, sheet)
     with zipfile.ZipFile(path) as z:
         raw = {n: z.read(n) for n in z.namelist()}
         infos = z.infolist()
@@ -133,6 +133,47 @@ class InPlace(unittest.TestCase):
     def test_an_id_that_is_not_there(self):
         _, missing, _ = self.write({"placeables": {"NOPE-99": {"x": 1}}})
         self.assertEqual(missing, ["NOPE-99"])
+
+
+class SyncLists(unittest.TestCase):
+    """Bringing a workbook made earlier up to date with the blank template's lists, dropdown and all."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.path = self.tmp / "lab-data.xlsx"
+        shutil.copy2(ROOT / "example" / "lab-data.xlsx", self.path)
+        self.col, self.last = model.list_layout(self.path)["category"]
+        self.dropped = model.read_workbook(self.path)[1]["category"][-1][0]
+        put_raw(self.path, f"A{self.last}", "", sheet="lists")  # a workbook from before that category existed
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def sync(self):
+        return model.sync_lists(self.path, ROOT / "example" / "lab-data.xlsx", self.tmp / "backups")
+
+    def test_it_adds_what_is_missing(self):
+        self.assertEqual(self.sync(), {"category": [self.dropped]})
+        self.assertIn(self.dropped, [v for v, _ in model.read_workbook(self.path)[1]["category"]])
+
+    def test_the_dropdown_reaches_the_new_value(self):
+        self.sync()
+        book = read_part(self.path, "xl/workbook.xml")
+        ref = re.search(r'name="L_category"[^>]*>([^<]*)<', book).group(1)
+        self.assertEqual(ref, f"lists!$A$2:$A${model.list_layout(self.path)['category'][1]}")
+
+    def test_it_leaves_a_workbook_that_is_already_current_alone(self):
+        self.sync()
+        before = read_part(self.path, "xl/workbook.xml")
+        self.assertEqual(self.sync(), {})
+        self.assertEqual(read_part(self.path, "xl/workbook.xml"), before)
+
+    def test_it_keeps_what_the_workbook_already_had(self):
+        xlsx.write_cells(self.path, {"lists": {f"A{self.last}": "ours-only"}})  # a category only this lab uses
+        self.sync()
+        values = [v for v, _ in model.read_workbook(self.path)[1]["category"]]
+        self.assertIn("ours-only", values)
+        self.assertIn(self.dropped, values)
 
 
 if __name__ == "__main__":

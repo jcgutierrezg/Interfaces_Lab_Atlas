@@ -232,6 +232,62 @@ def _arithmetic(expr):
         return None
 
 
+def list_layout(path):
+    """{list name: (its column on the lists sheet, the last row with a value)}. Each list is a column of values
+    with its meanings beside it, so every other header is a meaning column."""
+    from openpyxl import load_workbook
+
+    wb = load_workbook(path, read_only=True, data_only=True)
+    try:
+        rows = list(wb["lists"].iter_rows(values_only=True)) if "lists" in wb.sheetnames else []
+        out, meanings = {}, -1
+        for c, v in enumerate(rows[0] if rows else (), start=1):
+            if c == meanings or not isinstance(v, str) or not v.strip():
+                continue
+            last = max((n for n, row in enumerate(rows[1:], start=2) if len(row) >= c and row[c - 1] is not None),
+                       default=1)
+            out[v.strip()] = (c, last)
+            meanings = c + 1
+        return out
+    finally:
+        wb.close()
+
+
+def sync_lists(path, template, backup_dir=None):
+    """Copy list values the template has and this workbook hasn't (a category added since it was made) onto its
+    lists sheet, and stretch the dropdown's named range over them. Returns {list name: [values added]}."""
+    import shutil
+
+    from openpyxl.utils import get_column_letter
+
+    from . import xlsx
+
+    path, template = Path(path), Path(template)
+    ours, theirs = read_workbook(path)[1], read_workbook(template)[1]
+    where, defined = list_layout(path), xlsx.defined_names(path)
+    cells, names, added = {"lists": {}}, {}, {}
+    for name, values in theirs.items():
+        if name not in where or f"L_{name}" not in defined:
+            continue  # a list this workbook doesn't have, or doesn't drive a dropdown with: leave it alone
+        have = {str(v).lower() for v, _ in ours.get(name, [])}
+        new = [(v, m) for v, m in values if str(v).lower() not in have]
+        if not new:
+            continue
+        col, last = where[name]
+        letter, beside = get_column_letter(col), get_column_letter(col + 1)
+        for k, (v, m) in enumerate(new, start=1):
+            cells["lists"][f"{letter}{last + k}"] = v
+            cells["lists"][f"{beside}{last + k}"] = m or None
+        names[f"L_{name}"] = f"lists!${letter}$2:${letter}${last + len(new)}"
+        added[name] = [v for v, _ in new]
+    if added:
+        if backup_dir:
+            Path(backup_dir).mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, Path(backup_dir) / f"lab-data-{dt.datetime.now():%Y%m%d-%H%M%S}.xlsx")
+        xlsx.write_cells(path, cells, names)
+    return added
+
+
 def cells_for(path, moves):
     """({sheet: {cell ref: value}}, {(sheet, ref): (id, column)}, ids not found) for {sheet: {id: {column: value}}}."""
     from openpyxl import load_workbook

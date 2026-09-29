@@ -130,7 +130,8 @@ FILL = {"bench": "#e9dcc3", "table": "#e9dcc3", "desk": "#e9dcc3", "instrument":
         "probe-station": "#a9c8ea", "sun-simulator": "#fde68a", "laser": "#fcd34d", "light-source": "#fde68a",
         "spectrometer": "#bcd7f0", "microscope": "#bcd7f0", "dark-box": "#8b95a5", "glovebox": "#c9d3db",
         "vacuum-chamber": "#cbd5e1", "vacuum-pump": "#cbd5e1", "corona-box": "#fecaca", "spin-coater": "#bcd7f0",
-        "hotplate": "#fed7aa", "oven": "#fed7aa", "chiller": "#bfe8ec", "ups": "#d9c9ef"}
+        "hotplate": "#fed7aa", "oven": "#fed7aa", "chiller": "#bfe8ec", "ups": "#d9c9ef",
+        "workshop": "#c3cdb8"}
 
 
 def esc(v):
