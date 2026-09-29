@@ -221,7 +221,9 @@ def completeness(res):
 
 
 def unplaced(res):
-    lab, geo, P = res.lab, res.geo, res.lab.placeables
+    """Everything with no x and y yet, whatever it was going to stand on or in. Storage inside something (a
+    pedestal's drawers, a hood's cupboards) is contents and never has a position, so it isn't waiting for one."""
+    lab, P = res.lab, res.lab.placeables
     return [(i, r.get("name"), r.get("room")) for i, r in P.items()
-            if r.get("mount") in ("floor", "wall", "part") and r.get("shape") != "group" and i not in lab.gone
-            and (r.get("x") is None or r.get("y") is None)]
+            if r.get("shape") != "group" and i not in lab.gone and (r.get("x") is None or r.get("y") is None)
+            and not (r.get("mount") == "in" and r.get("category") in CONTAINERS)]

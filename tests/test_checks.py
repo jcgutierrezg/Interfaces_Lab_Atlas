@@ -364,6 +364,23 @@ class Data(unittest.TestCase):
         self.assertIn("Y has only one of x and y", messages)
 
 
+class Waiting(unittest.TestCase):
+    """What the report and the layout call 'not placed yet': anything with no x and y, wherever it was going."""
+
+    def waiting(self):
+        from labmap import metrics
+
+        rows = [P("BENCH", x=0, y=0, w=200, d=60, h=90, free_under=85),
+                P("HOOD", "on", "BENCH", category="fume-hood", w=150, d=60, h=120,
+                  inner_w=148, inner_d=58, inner_h=80),          # on a bench, nowhere on it yet
+                P("FURN", "in", "HOOD", category="oven", w=90, d=35, h=40),  # in the hood, nowhere in it yet
+                P("DRW", "in", "BENCH", category="drawer", w=40, d=50, h=15)]  # contents: never has a position
+        return {i for i, _, _ in metrics.unplaced(checks.run(lab_from(rows)))}
+
+    def test_things_waiting_on_or_in_something_count(self):
+        self.assertEqual(self.waiting(), {"HOOD", "FURN"})
+
+
 class AcrossAJoin(unittest.TestCase):
     """A bench or a sill made of parts is one surface: something can stand across the join between two of them."""
 
