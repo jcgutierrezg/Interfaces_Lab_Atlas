@@ -102,7 +102,47 @@ class Model(unittest.TestCase):
     def test_a_colour_per_category(self):
         js, _, _, _ = self.build([dict(id="B", room="R", mount="floor", category="bench", x=0, y=0, w=99, d=60, h=90)])
         material = js["materials"][self.mesh(js, "B")["primitives"][0]["material"]]
-        self.assertEqual(material["pbrMetallicRoughness"]["baseColorFactor"], glb._linear("#e9dcc3"))
+        self.assertEqual(material["pbrMetallicRoughness"]["baseColorFactor"], glb._linear(glb.colour_of("bench")))
+
+    def test_the_plan_colours_are_deepened_not_replaced(self):
+        """Same hue as the drawings, so what people have learnt from them carries over; darker, so a viewer's
+        lighting doesn't wash every category into the same off-white."""
+        for plan in ("#e9dcc3", "#bcd7f0", "#fecaca", "#c3cdb8"):
+            solid = glb.deepen(plan)
+            was, now = glb._hsl(*(int(plan[k:k + 2], 16) / 255 for k in (1, 3, 5))), \
+                glb._hsl(*(int(solid[k:k + 2], 16) / 255 for k in (1, 3, 5)))
+            self.assertAlmostEqual(was[0], now[0], places=2, msg=f"{plan} changed hue")
+            self.assertLess(now[2], was[2] - 0.15, f"{plan} -> {solid} isn't darker")
+            self.assertLess(now[1], 0.5, f"{plan} -> {solid} is too saturated")
+        self.assertEqual(glb._hsl(*(int(glb.deepen("#d6d6d6")[k:k + 2], 16) / 255 for k in (1, 3, 5)))[1], 0)  # grey
+
+    def test_faces_are_shaded_so_edges_show(self):
+        js, binary, _, _ = self.build([dict(id="B", room="R", mount="floor", category="bench",
+                                            x=0, y=0, w=200, d=60, h=90)])
+        prim = self.mesh(js, "B")["primitives"][0]
+        self.assertIn("COLOR_0", prim["attributes"])
+        a = js["accessors"][prim["attributes"]["COLOR_0"]]
+        view = js["bufferViews"][a["bufferView"]]
+        shades = struct.unpack_from(f"<{a['count'] * 4}f", binary, view["byteOffset"])[0::4]
+        self.assertEqual(max(shades), glb.SHADE["top"])
+        self.assertEqual(min(shades), glb.SHADE["bottom"])
+        self.assertGreater(len(set(round(s, 3) for s in shades)), 3)  # the four sides differ too
+
+    def test_a_bench_floats_above_its_leg_room(self):
+        """Filling in the leg room would hide the pedestal parked in it: only the top is drawn."""
+        js, _, _, _ = self.build([dict(id="B", room="R", mount="floor", category="bench", x=0, y=0, w=200, d=60,
+                                       h=90, free_under=85),
+                                  dict(id="PED", room="R", mount="floor", category="pedestal", x=20, y=5, w=50,
+                                       d=50, h=80)])
+        low, high = self.box(js, "B")
+        self.assertAlmostEqual(low[1], 0.85, places=4)  # the worktop starts where the leg room ends
+        self.assertAlmostEqual(high[1], 0.9, places=4)
+        self.assertAlmostEqual(self.box(js, "PED")[1][1], 0.8, places=4)  # ...and the pedestal is visible under it
+
+    def test_without_free_under_it_is_solid(self):
+        js, _, _, _ = self.build([dict(id="C", room="R", mount="floor", category="cabinet", x=0, y=0, w=60, d=50,
+                                       h=80)])
+        self.assertAlmostEqual(self.box(js, "C")[0][1], 0.0, places=4)
 
     def test_nothing_to_draw_it_from_is_reported_but_contents_are_not(self):
         js, _, skipped, _ = self.build([
@@ -145,10 +185,11 @@ class FromTheExample(unittest.TestCase):
         raise AssertionError(name)
 
     def matches_geometry(self, room, name):
+        """The footprint on the plan and the height it reaches; where it starts depends on free_under."""
         low, high = self.bounds(room, name)
         g = self.geo[name]
         x0, y0, x1, y1 = G.bbox(g.poly)
-        for got, want in zip(low + high, (x0, g.z[0], y0, x1, g.z[1], y1)):
+        for got, want in zip((low[0], low[2], high[0], high[2], high[1]), (x0, y0, x1, y1, g.z[1])):
             self.assertAlmostEqual(got, want / 100, places=3, msg=f"{name} {low} {high}")
 
     def test_a_profile_footprint(self):
