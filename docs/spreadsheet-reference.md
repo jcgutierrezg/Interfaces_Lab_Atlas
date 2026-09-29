@@ -186,6 +186,13 @@ A clearance applies in the plane the object sits in. For something on a bench, `
 free in front of it. For something on the floor, it's floor: standing room, drawer pull-out, door swing. Mandatory
 clear zones (eyewash, electrical panel, doors) are just large clearances on those objects, with `fixed = yes`.
 
+**How tall the zone is.** For something on the floor or on a wall, it is kept clear up to `person_height` (200 cm):
+that is where someone stands. One exception: a thing standing wholly in the free space under something else — a
+drawer pedestal rolled under a bench — only needs room to open, so its zone stops at the underside of whatever
+covers it. Otherwise the bench top would count as blocking its own pedestal. Cover can come from two surfaces at
+once, which is where a pedestal usually ends up in an L-shaped bench. It counts only if the pedestal fits
+underneath (`free_under` at least its height) and none of it sticks out.
+
 To stop working space being silently used up, add it as an object: category `workspace`, `mount = on`, with `h` =
 the headroom you need (see `WS-01`).
 

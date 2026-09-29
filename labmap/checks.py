@@ -125,9 +125,39 @@ def run(lab, today=None):
     return res
 
 
-def zones(r, g, person=200, door_gap=G.DOOR_GAP):
+def _probes(poly):
+    """Corners, edge midpoints and the centre of a footprint: enough to tell whether it is all under something."""
+    mids = [((a[0] + b[0]) / 2, (a[1] + b[1]) / 2) for a, b in zip(poly, poly[1:] + poly[:1])]
+    return list(poly) + mids + [G.centroid(poly)]
+
+
+def tucked_under(P, geo, ids):
+    """{id: how much headroom it has} for things standing in the free space under something else, like a drawer
+    pedestal rolled under a bench. Their clear zone is room to open them, not room to stand: it stops at the
+    surface above, or the bench top would count as blocking its own pedestal. Cover can come from more than one
+    surface, since a pedestal often sits under the join between two parts of the same bench."""
+    out = {}
+    for i in ids:
+        g, r = geo[i], P[i]
+        if r.get("mount") != "floor" or not g.poly:
+            continue
+        cover = [(geo[k].z[0] + P[k]["free_under"], geo[k].poly) for k in ids
+                 if k != i and P[k].get("free_under") is not None and geo[k].poly
+                 and g.z[1] <= geo[k].z[0] + P[k]["free_under"] + G.EPS]
+        tops = []
+        for spot in _probes(g.poly):
+            over = [top for top, poly in cover if G.inside(spot, poly)]
+            if not over:
+                break  # part of it stands out in the open: it needs room to stand at after all
+            tops.append(min(over))
+        else:
+            out[i] = min(tops)
+    return out
+
+
+def zones(r, g, person=200, door_gap=G.DOOR_GAP, headroom=None):
     """[(side, polygon, height band)] of the space an object needs kept free."""
-    zr = (0, person) if r.get("mount") in ("floor", "wall", "part") else g.z
+    zr = (0, headroom if headroom is not None else person) if r.get("mount") in ("floor", "wall", "part") else g.z
     if r.get("category") == "window":
         zr = g.z  # a window only needs its own height kept clear
     out = []
@@ -176,6 +206,7 @@ def _geometry(res):
     for rid, ids in by_room.items():
         room = lab.rooms.get(rid, {})
         outline, ceiling = room.get("poly"), room.get("ceiling")
+        under = tucked_under(P, geo, ids)
         for i in ids:
             r, g, parent = P[i], geo[i], P[i].get("parent")
             if outline and not G.contains(outline, g.poly):
@@ -221,7 +252,7 @@ def _geometry(res):
                 if g.z[1] > limit + G.EPS:
                     res.add("sprinkler", f"{i} reaches {g.z[1]:.0f} cm; with sprinklers, nothing above {limit:.0f} cm "
                                          f"({s['sprinkler_clearance']} cm below the {ceiling} cm ceiling)", [i, rid], rid)
-            for side, zp, zr in zones(r, g, s["person_height"], s["door_gap"]):
+            for side, zp, zr in zones(r, g, s["person_height"], s["door_gap"], under.get(i)):
                 if (side != "top" and outline and i not in window and r.get("mount") in ("floor", "wall", "part")
                         and not G.contains(outline, zp)):
                     res.add("wall-clearance", f"{i}'s {side} clear zone runs into a wall", [i], rid)

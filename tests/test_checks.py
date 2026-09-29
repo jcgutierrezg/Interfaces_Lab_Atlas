@@ -44,6 +44,12 @@ def lab_from(placeables, folder=ROOT, w=400, d=300, ceiling=None, settings=None,
     return model.build(folder, rows, room_polys={"R": [(0, 0), (w, 0), (w, d), (0, d)]}, settings=settings)
 
 
+def model_geo(lab):
+    from labmap import geometry as G
+
+    return {i: g for i, g in G.place_all(lab)[0].items() if g and g.poly}
+
+
 def found(lab):
     return {(f.rule, f.ids) for f in checks.run(lab).findings}
 
@@ -345,6 +351,36 @@ class Data(unittest.TestCase):
         self.assertIn("parent NOPE isn't on the placeables sheet", messages)
         self.assertIn("S is wall-mounted but has no z", messages)
         self.assertIn("Y has only one of x and y", messages)
+
+
+class TuckedUnder(unittest.TestCase):
+    """A pedestal parked under a bench needs room to open its drawers, not room to stand: the bench top above it
+    isn't in its way. Two benches side by side, and a pedestal under the join between them."""
+
+    def lab(self, benches=("A", "B"), free_under=85, **ped):
+        bench = dict(w=150, d=60, h=90, free_under=free_under)
+        rows = [P(f"BENCH-{n}", x=150 * k, y=0, **bench) for k, n in enumerate(benches)]
+        rows.append(P("PED", category="pedestal", w=45, d=50, h=80, clear_front=40,
+                      **{"x": 130, "y": 5, **ped}))
+        return lab_from(rows)
+
+    def zone(self, lab):
+        return [f.ids for f in checks.run(lab).findings if f.rule == "clear-zone"]
+
+    def test_the_bench_over_it_is_not_in_its_way(self):
+        self.assertEqual(self.zone(self.lab()), [])
+
+    def test_cover_can_come_from_two_benches_at_once(self):
+        """Without the second bench the pedestal is half out in the open, so it needs standing room again."""
+        self.assertEqual(self.zone(self.lab(benches=("A",))), [("PED", "BENCH-A")])
+
+    def test_a_bench_it_does_not_fit_under_is_in_its_way(self):
+        self.assertIn(("PED", "BENCH-A"), self.zone(self.lab(free_under=70)))
+
+    def test_headroom_is_the_lowest_thing_over_it(self):
+        lab = self.lab()
+        geo = model_geo(lab)
+        self.assertEqual(checks.tucked_under(lab.placeables, geo, list(geo)), {"PED": 85})
 
 
 if __name__ == "__main__":
