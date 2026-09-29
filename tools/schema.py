@@ -57,7 +57,7 @@ PLACEABLES = [
     col("clear_right", "cm, your right", "To your right as you face the front.", False, "int", 8),
     col("clear_top", "cm, lids", "Headroom above: lids that open upwards, sashes, hot exhaust. Checked against shelves and the ceiling.", False, "int", 8),
     col("door", "hinge side", "Fridges, freezers, cabinets: which side the door is hinged on, as you face the front (left, right, both = double doors). The width it sweeps opening to 90 degrees is kept clear in front. Nothing is kept clear beside the hinge, so cupboards can stand in a row: where a door has to open further back, measure that into clear_left or clear_right.", False, "list:door", 8),
-    col("fixed", "yes = can't move", "yes = plumbing, structure or safety equipment. The layout must work around it.", False, "list:yesno", 7),
+    col("fixed", "yes = can't move", "yes = plumbing, structure or safety equipment. The layout must work around it: it is locked in Inkscape and pull ignores moving it. One with no x and y yet isn't locked, so a new door or column can be dragged into place once.", False, "list:yesno", 7),
     col("mobile", "yes = wheels", "yes = carts, pedestals on castors. Its position is its parking spot.", False, "list:yesno", 7),
     col("stackable", "things on top?", "May other things sit on top? Blank = category default (bench, desk, table, shelf, cabinet, cart: yes; the rest: no).", False, "list:yesno", 9),
     col("fill", "% full", "Containers only (drawer, shelf, cabinet, box): how full, 0-100, eyeballed. Finds consolidation opportunities.", False, "pct", 7),

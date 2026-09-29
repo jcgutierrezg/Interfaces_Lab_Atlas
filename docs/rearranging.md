@@ -59,12 +59,17 @@ before and after. `pull` when you're happy; it saves the move list as a printabl
 - **Clearances** are drawn as dashed red boxes: what you measured into `clear_front` and the rest, and the swing
   in front of anything with a `door`.
 - **Rotate** in 45° steps (*Object › Transform › Rotate*). Anything else is rounded to the nearest 45°.
-- **Fixed things are locked.** Walls and notes, and every object with `fixed = yes` (doors, windows, the eyewash,
-  plumbed-in benches, columns), can't be selected or dragged on the canvas: *Edit › Unlock All* overrides that for
-  a session, but `pull` still ignores their moves and says so, and what stands on them is measured from where they
-  really are. To move one for good: clear `fixed`, drag it, `pull`, then set `fixed = yes` again (or just change
-  its `x`/`y` in the spreadsheet). Things standing on or inside a fixed object, such as hotplates in a fume hood,
-  stay movable; the parts of a fixed bench are locked with it.
+- **Fixed things are locked, once they're somewhere.** Walls and notes, and every object with `fixed = yes`
+  (doors, windows, the eyewash, plumbed-in benches, columns) **that has an `x` and `y`**, can't be selected or
+  dragged on the canvas: *Edit › Unlock All* overrides that for a session, but `pull` still ignores their moves and
+  says so, and what stands on them is measured from where they really are. To move one for good: clear `fixed`,
+  drag it, `pull`, then set `fixed = yes` again (or just change its `x`/`y` in the spreadsheet). Things standing on
+  or inside a fixed object, such as hotplates in a fume hood, stay movable; the parts of a fixed bench are locked
+  with it.
+- **A new fixed thing can be dragged in once.** Something marked `fixed = yes` that has never been placed has
+  nothing to be pinned to yet, so it waits in *not placed yet* unlocked. The drag that puts it in the room is kept
+  like any other, `pull` says so, and from then on it's locked. So a new door or column goes: fill in the row with
+  `fixed = yes` and no `x`/`y`, `layout`, drag it where it belongs, `pull`.
 - Sizes come from the spreadsheet: resizing in Inkscape is ignored.
 - `pull` writes into `lab-data.xlsx`, so save and close it in Excel first. A copy goes to `build/backups/` every
   time, and `pull --dry-run` shows the changes without writing them. Afterwards the drawing is redrawn to match:

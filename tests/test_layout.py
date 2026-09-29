@@ -44,8 +44,21 @@ class RoundTrip(unittest.TestCase):
         moves, _ = layout.layout_moves(lab)
         self.assertIn("SPEC-02", moves["placeables"])
         self.assertIsNotNone(moves["placeables"]["SPEC-02"]["y"])  # the drawing still knows where it is
-        fixed = model.load(self.tmp, {"placeables": {"BENCH-01": {"y": None}}})  # fixed = yes: left alone, quietly
-        self.assertNotIn("BENCH-01", layout.layout_moves(fixed)[0]["placeables"])
+        placed = model.load(self.tmp)  # BENCH-01 is fixed = yes and has a position: left alone
+        self.assertNotIn("BENCH-01", layout.layout_moves(placed)[0]["placeables"])
+
+    def test_something_fixed_can_be_dragged_into_place_once(self):
+        """fixed = yes locks what is already somewhere. A new door has to get there in the first place: it waits
+        in the 'not placed yet' area, unlocked, and the drag that puts it in the room is kept."""
+        blank = {"placeables": {"BENCH-01": {"x": None, "y": None}}}
+        svg = layout.editable(model.load(self.tmp, blank), checks.run(model.load(self.tmp, blank)))
+        group = svg[svg.find(f'id="{layout.PREFIX}BENCH-01"'):][:400]
+        self.assertNotIn("sodipodi:insensitive", group)  # not locked while it has nowhere to be
+        self.assertIn("sodipodi:insensitive", layout.editable(self.lab, self.res).split(
+            f'id="{layout.PREFIX}BENCH-01"')[1][:400])  # ...and locked again once it has
+        moves, notes = layout.layout_moves(model.load(self.tmp, blank))  # the drag that places it is kept
+        self.assertEqual(moves["placeables"]["BENCH-01"], {"x": 450, "y": 0, "faces": None})
+        self.assertTrue(any("hadn't been placed" in n for n in notes), notes)
 
     def relayer(self, i, key):
         """Move i to another layer, like Layer › Move Selection to Layer Above / Below in Inkscape."""

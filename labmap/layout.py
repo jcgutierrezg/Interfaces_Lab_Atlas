@@ -391,10 +391,8 @@ def _object(lab, i, origin, angle, abs_angle, flagged, unplaced=False, sizes=Non
         tip += " · " + " · ".join(flagged[i][0])
     tf = f"translate({_n(origin[0])},{_n(origin[1])})" + (f" rotate({_n(angle)})" if angle % 360 else "")
     cls = f' class="lv-{levels[i]}"' if levels and i in levels else ""
-    locked = r.get("fixed") == "yes" or (r.get("mount") == "part"  # a piece of a fixed bench, but not what's on it
-                                         and P.get(r.get("parent"), {}).get("fixed") == "yes")
     ink = "" if nest else (f' inkscape:label="{esc(i)}"' +
-                           (' sodipodi:insensitive="true"' if locked else ""))  # fixed = yes: locked in Inkscape too
+                           (' sodipodi:insensitive="true"' if pinned(P, i) else ""))  # fixed and placed: locked
     out = [f'<g id="{PREFIX}{esc(i)}"{cls}{ink} transform="{tf}"><title>{esc(tip)}</title>']
     kids = lab.children.get(i, [])
     if r.get("shape") == "group":
@@ -476,6 +474,17 @@ def _contents(r):
     isn't waiting to be put somewhere. Only a fume hood's working space made these ask to be placed, because that
     is the one enclosure with the room inside it described."""
     return r.get("category") in CONTAINERS and (r.get("x") is None or r.get("y") is None)
+
+
+def pinned(P, i):
+    """fixed = yes, and already somewhere. Such an object is locked in Inkscape, its spreadsheet position wins over
+    the drawing, and pull ignores its moves. Something fixed that has never been placed isn't pinned to anything
+    yet, so it can be dragged out of the waiting area once: that first drag is how it gets its position."""
+    r = P.get(i) or {}
+    if r.get("x") is None or r.get("y") is None:
+        return False
+    return r.get("fixed") == "yes" or (r.get("mount") == "part"  # a piece of a fixed bench, but not what's on it
+                                       and P.get(r.get("parent"), {}).get("fixed") == "yes")
 
 
 def _tall(lab, i):
@@ -906,10 +915,6 @@ def moves_from(lab, mats, rooms, layers=None):
     ids = [i for i in ids if P[i].get("shape") != "group"] + [i for i in ids if P[i].get("shape") == "group"]
     notes = []
 
-    def pinned(j):
-        r = P.get(j, {})
-        return r.get("fixed") == "yes" or (r.get("mount") == "part" and P.get(r.get("parent"), {}).get("fixed") == "yes")
-
     def locate(pt):
         for rid, (inv, poly) in frames.items():
             if G.inside(_apply(inv, pt), poly):
@@ -929,10 +934,10 @@ def moves_from(lab, mats, rooms, layers=None):
         if not pts:
             continue
         rid, staged = locate(_apply(mats[i], G.centroid(pts)))
-        if rid is None and not pinned(i):
+        if rid is None and not pinned(P, i):
             notes.append(f"{i} is outside every room and 'not placed yet' area, so it was left as it was")
             ignored.add(i)
-        land[i] = (r.get("room"), r.get("x") is None) if rid is None or pinned(i) else (rid, staged)
+        land[i] = (r.get("room"), r.get("x") is None) if rid is None or pinned(P, i) else (rid, staged)
     for i in ids:
         if P[i].get("mount") == "part":
             land[i] = land.get(P[i].get("parent"))
@@ -943,7 +948,7 @@ def moves_from(lab, mats, rooms, layers=None):
 
     def frame(j):
         """Where j is in its room: as drawn, except that a fixed object stays where the spreadsheet has it."""
-        if pinned(j) or j in ignored:
+        if pinned(P, j) or j in ignored:
             m = abs_matrix(lab, j)
             if m is not None:
                 return m
@@ -1050,9 +1055,12 @@ def moves_from(lab, mats, rooms, layers=None):
         change = {k: v[k] for k in ("parent", "mount", "room") if v[k] != r.get(k)}
         if same_xy and not change and (faces or "S") == (r.get("faces") or "S"):
             continue
-        if r.get("fixed") == "yes":
+        if pinned(P, i):
             notes.append(f"{i} is fixed = yes, so its move in the layout was ignored")
             continue
+        if r.get("fixed") == "yes":
+            notes.append(f"{i} is fixed = yes and hadn't been placed: this is where it goes, and it's locked "
+                         f"in the drawing from now on")
         moves["placeables"][i] = dict(x=v["x"], y=v["y"], faces=faces, **change)
 
     def room_now(i):
