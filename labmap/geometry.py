@@ -174,6 +174,15 @@ def clear_boxes(r, w, d, door_gap=DOOR_GAP):
     return {k: b for k, b in boxes.items() if c[k] > 0}
 
 
+def hinge_sides(r):
+    """The sides whose clearance is only there so a door can open past 90 degrees, rather than something measured.
+    Blocking one means the door still opens to 90, which is enough to use it: worth saying, not a problem."""
+    door = r.get("door")
+    if door not in ("left", "right", "both"):
+        return set()
+    return {side for side in (("left", "right") if door == "both" else (door,)) if not r.get(f"clear_{side}")}
+
+
 def interior(lab, i):
     """(u0, v0, w, d, h, z) of an enclosure's working space in its own frame: centred left to right, flush with the
     front, work surface z above its underside. None if it has no inner_w and inner_d."""

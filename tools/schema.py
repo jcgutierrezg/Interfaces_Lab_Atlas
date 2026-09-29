@@ -56,7 +56,7 @@ PLACEABLES = [
     col("clear_left", "cm, your left", "To your left as you face the front: hinge side, vents, access panels.", False, "int", 8),
     col("clear_right", "cm, your right", "To your right as you face the front.", False, "int", 8),
     col("clear_top", "cm, lids", "Headroom above: lids that open upwards, sashes, hot exhaust. Checked against shelves and the ceiling.", False, "int", 8),
-    col("door", "hinge side", "Fridges, freezers, cabinets: which side the door is hinged on, as you face the front (left, right, both = double doors). The swing is kept clear in front, and door_gap (settings) beside the hinge so it opens fully.", False, "list:door", 8),
+    col("door", "hinge side", "Fridges, freezers, cabinets: which side the door is hinged on, as you face the front (left, right, both = double doors). The swing is kept clear in front. Something right beside the hinge is only a warning (the door still opens to 90 degrees): where you need more, measure it into clear_left or clear_right.", False, "list:door", 8),
     col("fixed", "yes = can't move", "yes = plumbing, structure or safety equipment. The layout must work around it.", False, "list:yesno", 7),
     col("mobile", "yes = wheels", "yes = carts, pedestals on castors. Its position is its parking spot.", False, "list:yesno", 7),
     col("stackable", "things on top?", "May other things sit on top? Blank = category default (bench, desk, table, shelf, cabinet, cart: yes; the rest: no).", False, "list:yesno", 9),

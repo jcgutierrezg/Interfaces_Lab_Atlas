@@ -142,10 +142,23 @@ class WindowsStacksCeilings(unittest.TestCase):
 class BeforeMeasuring(unittest.TestCase):
     """Doors, fit margin, sprinklers, services needed, keep-apart, socket ratings, door fit."""
 
-    def test_door_hinge_needs_room_beside_it(self):
+    def test_a_blocked_hinge_is_a_warning_not_a_problem(self):
+        """A cupboard in a row of cupboards, or in a corner, still opens to 90 degrees: say so, don't fail it."""
         fridge = dict(x=5, y=100, w=60, d=60, h=180, category="fridge")  # 5 cm from the left wall, facing S
+        self.assertIn(("hinge", ("F",)), found(lab_from([P("F", door="left", **fridge)])))
+        self.assertNotIn(("hinge", ("F",)), found(lab_from([P("F", door="right", **fridge)])))
+        beside = found(lab_from([P("F", door="left", **fridge),
+                                 P("X", x=0, y=100, w=5, d=60, h=180, category="cabinet")]))
+        self.assertIn(("hinge", ("F", "X")), beside)
+        self.assertNotIn(("clear-zone", ("F", "X")), beside)
+
+    def test_but_a_clearance_you_measured_is_still_a_problem(self):
+        """clear_left on the hinge side is a measurement, not a nicety: blocking it fails as before."""
+        fridge = dict(x=5, y=100, w=60, d=60, h=180, category="fridge", clear_left=20)
         self.assertIn(("wall-clearance", ("F",)), found(lab_from([P("F", door="left", **fridge)])))
-        self.assertNotIn(("wall-clearance", ("F",)), found(lab_from([P("F", door="right", **fridge)])))
+
+    def test_the_swing_in_front_of_a_door_is_a_problem(self):
+        fridge = dict(x=5, y=100, w=60, d=60, h=180, category="fridge")
         f = found(lab_from([P("F", door="right", **fridge), P("X", x=30, y=200, w=20, d=20, h=50, category="instrument")]))
         self.assertIn(("clear-zone", ("F", "X")), f)  # standing in the door's swing (60 cm in front)
 

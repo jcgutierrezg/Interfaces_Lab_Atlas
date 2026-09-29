@@ -15,7 +15,7 @@ the problems grouped by rule, then progress, rooms, bench space, fume hoods, pow
 containers and what isn't placed yet. Findings are **problems** (something's wrong) or **warnings** (worth a look:
 covered windows, stacks on things not marked stackable, forms not approved or about to expire, spare parts
 out of stock or running low, required spares not counted for a long time, things closer than `keep_apart`
-suggests, arrivals too big for the door). It's fine
+suggests, arrivals too big for the door, a cupboard door that only opens to 90°). It's fine
 to run on half-filled data: missing data shows up under progress, not as problems. [example/README.md](../example/README.md) explains
 each rule.
 
