@@ -1,4 +1,4 @@
-"""Command line: python -m labmap <check | layout | pull | site | xy | lists> [folder]
+"""Command line: python -m labmap <check | layout | pull | site | xy | lists | model> [folder]
 
 The folder is the one holding lab-data.xlsx (with rooms/, shapes/, sops/, photos/ beside it). Without one, the
 folder named in labmap.ini (next to this package) is used, e.g. a synced Teams or OneDrive folder; failing that,
@@ -14,7 +14,7 @@ import sys
 import webbrowser
 from pathlib import Path
 
-from . import checks, model, report
+from . import checks, metrics, model, report
 from .checks import describe
 
 CONFIG = Path(__file__).resolve().parent.parent / "labmap.ini"
@@ -116,8 +116,15 @@ def _layout(args):
     if stale:
         print(f"Careful: {len(stale)} cell(s) hold a formula with no stored result, so they read as blank and what "
               f"they place lands in 'not placed yet'. Open lab-data.xlsx in Excel and save it, then draw again.")
-    path, status = layout.write_layouts(lab, checks.run(lab), force=args.force)
+    res = checks.run(lab)
+    path, status = layout.write_layouts(lab, res, force=args.force)
     print(f"All rooms: {status}  {path.resolve()}")
+    waiting = metrics.unplaced(res)
+    if waiting:
+        names = ", ".join(i for i, _, _ in waiting[:8]) + (" ..." if len(waiting) > 8 else "")
+        print(f"{len(waiting)} thing(s) have no x and y yet, so they're in the 'not placed yet' area beside their "
+              f"room, off to the right of it: {names}")
+        print("  drag each one where it goes, save, then pull.")
     if args.open:
         os.startfile(path.parent) if hasattr(os, "startfile") else webbrowser.open(path.parent.resolve().as_uri())
     print("Open it in Inkscape, drag things around (between rooms too) and save. Then:")
@@ -178,6 +185,33 @@ def _pull(args):
         print(f"The workbook's {note['formulas']} formula(s) kept their stored results, and Excel will work them "
               f"out again next time you open it: any that read a cell this pull changed still show the old value.")
     print("Now run `python -m labmap check` to see the result.")
+    return 0
+
+
+def _model(args):
+    """A 3D model per room, from the same geometry as the drawings."""
+    from . import glb
+
+    folder = data_folder(args.folder)
+    lab = _load(folder)
+    if lab is None:
+        return 2
+    rooms = [r.strip().upper() for r in args.room.split(",")] if args.room else None
+    if rooms and any(r not in lab.placeables and r not in lab.rooms for r in rooms):
+        print(f"Rooms on the rooms sheet: {', '.join(lab.rooms)}")
+        return 2
+    built = glb.write_models(lab, checks.run(lab), folder, rooms, args.walls)
+    if not built:
+        print("No rooms to model: the rooms sheet is empty, or none of them has an outline yet.")
+        return 2
+    for path, parts, skipped in built:
+        print(f"{path.stem}: {parts} part(s)  {path.resolve()}")
+        if skipped:
+            print(f"  not drawn, nothing to draw them from yet (no size or no place): {', '.join(skipped[:8])}" + (" ..." if len(skipped) > 8 else ""))
+    print("Double-click a .glb to open it in 3D Viewer on Windows; drag to orbit, right-drag or two fingers to pan.")
+    print(f"Walls stop at {args.walls} cm so you can see in: --walls 250 for full height, --walls 0 for none.")
+    if args.open:
+        os.startfile(built[0][0].parent) if hasattr(os, "startfile") else None
     return 0
 
 
@@ -329,6 +363,13 @@ def main(argv=None):
     pl.add_argument("folder", nargs="?", help=folder_help)
     pl.add_argument("--dry-run", action="store_true", help="show the changes without writing them")
     pl.set_defaults(run=_pull)
+    md = sub.add_parser("model", help="write build/model/<ROOM>.glb, a 3D model of each room to look around in")
+    md.add_argument("folder", nargs="?", help=folder_help)
+    md.add_argument("--room", help="one room, or several separated by commas (default: all of them)")
+    md.add_argument("--walls", type=int, default=120,
+                    help="wall height in cm, so you can see in from outside (default 120; 0 for no walls)")
+    md.add_argument("--open", action="store_true", help="open the folder it's in")
+    md.set_defaults(run=_model)
     ls = sub.add_parser("lists", help="copy list values the blank template has gained (a new category, say) into "
                                       "your workbook's lists sheet, dropdowns included")
     ls.add_argument("folder", nargs="?", help=folder_help)
