@@ -229,18 +229,90 @@ def _arithmetic(expr):
         return None
 
 
-def write_moves(path, moves, backup_dir):
-    """Write {sheet: {id: {column: value}}} into the workbook after copying it to backup_dir. Only those cells
-    change; validation, formatting and comments are kept. Returns (backup path, ids not found, formulas), where
-    formulas is ([(id, column, formula) replaced by a number], how many formulas are left in the workbook).
-    Saving from here drops every formula's stored result, so a workbook with formulas has to be opened and saved
-    in Excel before it is read again."""
-    import shutil
+def cells_for(path, moves):
+    """({sheet: {cell ref: value}}, {(sheet, ref): (id, column)}, ids not found) for {sheet: {id: {column: value}}}."""
     from openpyxl import load_workbook
+    from openpyxl.utils import get_column_letter
+
+    wb = load_workbook(path, read_only=True, data_only=True)
+    try:
+        cells, where, missing = {}, {}, []
+        for sheet, changes in moves.items():
+            if not changes:
+                continue
+            ws = wb[sheet]
+            head, rows = {}, {}
+            for n, row in enumerate(ws.iter_rows(values_only=True), start=1):
+                if n == 1:
+                    head = {v.strip(): k for k, v in enumerate(row, start=1) if isinstance(v, str)}
+                elif n > 2 and row and row[head["id"] - 1] is not None:
+                    rows.setdefault(str(row[head["id"] - 1]).strip().upper(), n)
+            for i, change in changes.items():
+                n = rows.get(i)
+                if n is None:
+                    missing.append(i)
+                    continue
+                for k, v in change.items():
+                    if k in head:
+                        ref = f"{get_column_letter(head[k])}{n}"
+                        cells.setdefault(sheet, {})[ref] = v
+                        where[(sheet, ref)] = (i, k)
+        return cells, where, missing
+    finally:
+        wb.close()
+
+
+def write_moves(path, moves, backup_dir):
+    """Write {sheet: {id: {column: value}}} into the workbook after copying it to backup_dir.
+
+    Only those cells change: the rest of the file is copied across byte for byte, so formulas keep the results
+    Excel stored with them, and so do the conditional formatting and validation openpyxl doesn't model. Returns
+    (backup path, ids not found, note), where note has the formulas the write replaced with a number, how many
+    formulas the workbook still holds, and, if it had to be rewritten wholesale after all, why.
+
+    Excel is asked to recalculate on load, since a number written over a cell other formulas depend on leaves
+    their stored results out of date.
+    """
+    import shutil
+
+    from . import xlsx
 
     path, backup_dir = Path(path), Path(backup_dir)
+    cells, where, missing = cells_for(path, moves)
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    backup = backup_dir / f"lab-data-{dt.datetime.now():%Y%m%d-%H%M%S}.xlsx"
+    shutil.copy2(path, backup)
+    note = {"replaced": [], "rewrote": None, "formulas": 0}
+    try:
+        replaced, note["formulas"] = xlsx.write_cells(path, cells)
+        for (sheet, ref), formula in replaced.items():
+            note["replaced"].append((*where[(sheet, ref)], formula))
+        _check_readable(path, backup)
+    except xlsx.Unsupported as e:
+        note["rewrote"] = str(e)
+        note["replaced"] = _rewrite(path, moves)
+    return backup, missing, note
+
+
+def _check_readable(path, backup):
+    """A written workbook that won't open is worse than no write at all: put the backup back if so."""
+    import shutil
+
+    from openpyxl import load_workbook
+
+    try:
+        load_workbook(path, read_only=True).close()
+    except Exception:
+        shutil.copy2(backup, path)
+        raise
+
+
+def _rewrite(path, moves):
+    """The fallback: let openpyxl write the whole workbook. Formulas lose their stored results."""
+    from openpyxl import load_workbook
+
     wb = load_workbook(path)
-    missing, replaced = [], []
+    replaced = []
     for sheet, changes in moves.items():
         if not changes:
             continue
@@ -254,7 +326,6 @@ def write_moves(path, moves, backup_dir):
         for i, change in changes.items():
             n = rows.get(i)
             if n is None:
-                missing.append(i)
                 continue
             for k, v in change.items():
                 if k in col:
@@ -262,13 +333,8 @@ def write_moves(path, moves, backup_dir):
                     if isinstance(was, str) and was.startswith("="):
                         replaced.append((i, k, was))
                     ws.cell(n, col[k]).value = v
-    left = sum(isinstance(c.value, str) and c.value.startswith("=")
-               for ws in wb.worksheets for row in ws.iter_rows() for c in row)
-    backup_dir.mkdir(parents=True, exist_ok=True)
-    backup = backup_dir / f"lab-data-{dt.datetime.now():%Y%m%d-%H%M%S}.xlsx"
-    shutil.copy2(path, backup)
     wb.save(path)
-    return backup, missing, (replaced, left)
+    return replaced
 
 
 def _clean(v):

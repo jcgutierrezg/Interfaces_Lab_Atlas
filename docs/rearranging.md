@@ -64,9 +64,12 @@ before and after. `pull` when you're happy; it saves the move list as a printabl
   time, and `pull --dry-run` shows the changes without writing them. Afterwards the drawing is redrawn to match:
   in Inkscape, *File › Revert* to load the new version.
 - `layout` won't overwrite a drawing with moves you haven't pulled yet. `layout --force` throws them away.
-- **Formulas in the spreadsheet.** Excel stores a formula *and* its last result; everything here reads the result.
-  Writing the workbook from outside Excel (which `pull` does) keeps the formulas but drops those stored results, so
-  until you open it in Excel and save once, every formula cell reads as blank. `check` says which ones. `pull`
-  refuses to run while a position reads blank, because it would write the drawing's numbers over your formulas,
-  and it says so at the end when the workbook it just wrote has formulas left in it. A formula it did have to
-  replace — you dragged that object, so the number is now the truth — is listed by name.
+- **Formulas in the spreadsheet** (`=903-30`, `=rooms!E3-M26`) are fine to use. Excel stores a formula *and* its
+  last result, and everything here reads the result, so `pull` changes only the cells it has to and copies the rest
+  of the file across untouched: formulas keep their stored results, and so do conditional formatting and
+  validation. It asks Excel to recalculate next time the workbook is opened, because a formula that reads a cell
+  the pull changed still shows its old value until then. A formula `pull` had to replace — you dragged that
+  object, so the number is the truth now — is listed by name as it goes.
+- If a position ever does read as blank (an older `pull` rewrote the workbook, or another tool did), `check` says
+  which cells, and `pull` refuses to start rather than write the drawing's numbers over those formulas: open
+  `lab-data.xlsx` in Excel, save it once, and the stored results are back.

@@ -157,14 +157,16 @@ def _pull(args):
     if moved is None:
         return 2
     try:
-        backup, missing, (replaced, formulas) = model.write_moves(folder / "lab-data.xlsx", moves,
-                                                                  folder / "build" / "backups")
+        backup, missing, note = model.write_moves(folder / "lab-data.xlsx", moves, folder / "build" / "backups")
     except PermissionError:
         print("Couldn't write lab-data.xlsx: close it in Excel (and let OneDrive finish syncing), then run pull again.")
         return 2
     print(f"{n - len(missing)} change(s) written to lab-data.xlsx. Backup: {backup.resolve()}")
-    for i, col, formula in replaced:
+    for i, col, formula in note["replaced"]:
         print(f"  note: {i}'s {col} was the formula {formula}; the drawing's number replaced it")
+    if note["rewrote"]:
+        print(f"  note: the cells couldn't be changed one by one ({note['rewrote']}), so the whole workbook was "
+              f"rewritten. Open lab-data.xlsx in Excel and save it once: its formulas have no stored result now.")
     after = checks.run(moved)
     stamp = dt.datetime.now()
     sheet = report.write_move_list(folder / "build" / "move-lists" / f"move-list-{stamp:%Y%m%d-%H%M}.html",
@@ -172,11 +174,10 @@ def _pull(args):
     print(f"Move list to print: {sheet.resolve()}")
     layout.write_layouts(moved, after, force=True)
     print("Layout redrawn to match. If it's open in Inkscape, use File › Revert to see the new version.")
-    if formulas:
-        print(f"Open lab-data.xlsx in Excel and save it once before anything else: it has {formulas} formula(s), "
-              f"and writing from here leaves them without a stored result, so they read as blank.")
-    else:
-        print("Now run `python -m labmap check` to see the result.")
+    if note["formulas"] and not note["rewrote"]:
+        print(f"The workbook's {note['formulas']} formula(s) kept their stored results, and Excel will work them "
+              f"out again next time you open it: any that read a cell this pull changed still show the old value.")
+    print("Now run `python -m labmap check` to see the result.")
     return 0
 
 
