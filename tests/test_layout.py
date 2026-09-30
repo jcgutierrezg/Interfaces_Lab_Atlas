@@ -277,7 +277,8 @@ class RoundTrip(unittest.TestCase):
         after = checks.run(model.load(self.tmp, moves))
         rows = report.move_rows(before, after, moves)
         self.assertEqual(len(rows), 1)
-        what, frm, to, plug, _ = rows[0]
+        rnd, what, frm, to, plug, _ = rows[0]
+        self.assertEqual(rnd, 1)
         self.assertTrue(what.startswith("SPEC-02") and "BENCH-04.B" in frm and "TBL-01" in to)
         self.assertEqual(plug, "OUT-01 → OUT-07 (nearest)")
         html = report.comparison(before, after)

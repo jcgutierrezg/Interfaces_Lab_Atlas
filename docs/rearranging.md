@@ -29,6 +29,21 @@ is, better in green and worse in red), and the **move list**: what moves where, 
 before and after. `pull` when you're happy; it saves the move list as a printable page with a tick box per move in
 `build/move-lists/`, for moving day.
 
+**The move list is in the order to do it**, in rounds. Everything in a round can be done in any order, or by
+different people at once; a round starts when the one before it is finished. What decides the order:
+
+- **Something in the way goes first.** If a cupboard is going where a bench stands now, the bench moves in an
+  earlier round.
+- **A bench goes in before what goes on it**, and anything leaving a bench comes off before the bench moves.
+- **A swap parks one of them.** Two things that want each other's place (or a longer ring of them) can't either
+  go first, so the smallest is parked somewhere clear in the first round — in the corridor, in a free corner —
+  and brought back in its turn. Nothing unrelated waits for it.
+
+Each row also says **what to do before lifting it**: agree a time to switch off anything marked `critical`, that
+it loses its UPS or generator backing if the new socket doesn't have it, which gas, vacuum, air, water, drain or
+exhaust lines to disconnect (from `needs`), which cables to unplug (from the links sheet), and what to clear off
+it and put back after.
+
 - **Every object moves on its own.** Click it and drag it. Things on a bench don't follow the bench: to move a bench
   with everything on and under it, drag a box around it (rubber-band select) and move the lot.
 - **Drop an instrument on another bench** and `pull` gives it that bench as its new `parent`. It stands on the

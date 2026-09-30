@@ -138,42 +138,75 @@ def _where(P, i):
 
 
 def move_rows(before, after, moves):
-    """(what, from, to, re-plug, notes) for each thing that moves: the list to hand out on moving day."""
+    """(round, what, from, to, re-plug, notes) in the order to do them: the list to hand out on moving day.
+    Within a round the order doesn't matter; each round waits for the one before (see sequence.py)."""
+    from .sequence import plan
+
     Pb, Pa = before.lab.placeables, after.lab.placeables
     changes = moves.get("placeables", {})
-    out = []
-    for i, change in sorted(changes.items(), key=lambda kv: (Pb[kv[0]].get("room") or "", kv[0])):
-        if set(change) == {"room"}:
-            continue  # drawers and the like: they go with their parent
+    out, round_of = [], {}
+    for step in plan(before, after, moves):
+        i = step.id
+        what = f"{i} {Pb[i].get('name') or ''}".strip()
+        if step.kind == "park":
+            out.append((step.round, f"Park {what}", _where(Pb, i), "somewhere clear, for now", "",
+                        "; ".join(step.notes)))
+            continue
+        round_of[i] = step.round
         pb, pa = before.assign.get(i), after.assign.get(i)
         plug = "" if pb == pa else f"{pb or 'none'} → {pa or 'none'}" + (" (nearest)" if i in after.nearest else "")
-        notes = []
+        notes = ["once " + " and ".join(why for _, why in step.after)] if step.after else []
         along = [k for k, c in changes.items() if set(c) == {"room"} and Pb[k].get("parent") == i]
         if along:
             notes.append("take along " + ", ".join(along))
+        notes += step.notes
         if i in moves.get("equipment", {}):
             notes.append(f"outlet {before.lab.equipment[i].get('outlet')} cleared: fill in the new one")
-        out.append((f"{i} {Pb[i].get('name') or ''}".strip(), _where(Pb, i), _where(Pa, i), plug, "; ".join(notes)))
+        out.append((step.round, what, _where(Pb, i), _where(Pa, i), plug, "; ".join(notes)))
+    last = max((r[0] for r in out), default=0)
     for sid, change in sorted(moves.get("services", {}).items()):
         s = before.lab.services[sid]
-        out.append((f"{sid} ({s.get('type')})", s.get("room"), change["room"], "",
-                    f"goes with {s.get('parent')}: check its circuit in the new room"))
+        out.append((round_of.get(s.get("parent"), last), f"{sid} ({s.get('type')})", s.get("room"), change["room"],
+                    "", f"goes with {s.get('parent')}: check its circuit in the new room"))
     return out
+
+
+def _rounds_note(rows):
+    rounds = len({r[0] for r in rows})
+    lifts = sum(1 for r in rows if not str(r[1]).startswith("Park "))
+    parks = len(rows) - lifts
+    return (f"{lifts} move{'' if lifts == 1 else 's'} in {rounds} round{'' if rounds == 1 else 's'}"
+            + (f", with {parks} thing{'' if parks == 1 else 's'} parked out of the way for a while" if parks else "")
+            + ". Within a round the order doesn't matter, and different people can take different rows; each "
+              "round starts once the one before it is finished.")
 
 
 def move_list(before, after, moves):
     rows = move_rows(before, after, moves)
-    return table(["What", "From", "To", "Re-plug", "Notes"], rows) if rows else "<p class='note'>Nothing moves.</p>"
+    if not rows:
+        return "<p class='note'>Nothing moves.</p>"
+    return (f"<p class='note'>{esc(_rounds_note(rows))}</p>"
+            + table(["Round", "What", "From", "To", "Re-plug", "Before you lift it"], rows))
 
 
 def write_move_list(path, before, after, moves, note=""):
-    """A printable page: every move, with a box to tick."""
+    """A printable page: every move in the order to do it, round by round, with a box to tick."""
     rows = move_rows(before, after, moves)
-    body = "".join("<tr><td class='done'>&#9744;</td>" + "".join(f"<td>{esc(v)}</td>" for v in r) + "</tr>" for r in rows)
-    text = (f"<!doctype html><html lang='en'><head><meta charset='utf-8'><title>Move list</title><style>{CSS}</style>"
-            f"</head><body><main><h1>Move list</h1><div class='sub'>{esc(note)}</div>"
+    body, current = [], None
+    for r in rows:
+        if r[0] != current:
+            current = r[0]
+            body.append(f"<tr class='round'><th colspan='6'>Round {current}"
+                        + (" · once round " + str(current - 1) + " is done" if current > 1 else "") + "</th></tr>")
+        cls = " class='park'" if str(r[1]).startswith("Park ") else ""
+        body.append(f"<tr{cls}><td class='done'>&#9744;</td>" + "".join(f"<td>{esc(v)}</td>" for v in r[1:]) + "</tr>")
+    intro = f"<p class='note'>{esc(_rounds_note(rows))}</p>" if rows else "<p class='note'>Nothing moves.</p>"
+    text = (f"<!doctype html><html lang='en'><head><meta charset='utf-8'><title>Move list</title><style>{CSS}"
+            f"tr.round th {{ background: #eef2f7; text-align: left; padding-top: 10px; }}"
+            f"tr.park td {{ background: #fff8e6; }}</style>"
+            f"</head><body><main><h1>Move list</h1><div class='sub'>{esc(note)}</div>{intro}"
             f"<table><thead><tr><th class='done'>Done</th><th>What</th><th>From</th><th>To</th><th>Re-plug</th>"
-            f"<th>Notes</th></tr></thead><tbody>{body}</tbody></table></main></body></html>")
+            f"<th>Before you lift it</th></tr></thead><tbody>{''.join(body)}</tbody></table></main></body></html>")
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
