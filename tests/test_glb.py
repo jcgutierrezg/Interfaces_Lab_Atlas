@@ -160,6 +160,99 @@ class Model(unittest.TestCase):
         self.assertEqual(skipped, [])
 
 
+class ReadingTheChecks(unittest.TestCase):
+    """The model as a way of reading the report: problems red, zones painted, a drawn arrangement before pulling."""
+
+    def setUp(self):
+        import shutil
+
+        self.tmp = Path(tempfile.mkdtemp())
+        for name in ("lab-data.xlsx", "rooms", "shapes"):
+            src = ROOT / "example" / name
+            (shutil.copytree if src.is_dir() else shutil.copy2)(src, self.tmp / name)
+        self.lab = model.load(self.tmp)
+
+    def nodes(self, path):
+        js, _ = read(path)
+        out = {}
+        for node in js["nodes"]:
+            prim = js["meshes"][node["mesh"]]["primitives"][0]
+            out[node["name"]] = (js["materials"][prim["material"]], node.get("extras") or {})
+        return out
+
+    def colour(self, material):
+        return material["pbrMetallicRoughness"]["baseColorFactor"]
+
+    def build(self, **kw):
+        built = glb.write_models(self.lab, checks.run(self.lab), self.tmp, ["LAB-A"], **kw)
+        return self.nodes(built[0][0])
+
+    def named(self, nodes, i):
+        return next(v for k, v in nodes.items() if k == i or k.startswith(i + " ") and "clear zone" not in k
+                    and "(was here)" not in k)
+
+    def test_a_problem_is_red_and_says_why(self):
+        material, extras = self.named(self.build(), "CART-02")  # stands in the eyewash's clear zone
+        self.assertEqual(self.colour(material), glb._linear(glb.PROBLEM))
+        self.assertTrue(any("EYE-01" in m for m in extras["findings"]), extras)
+
+    def test_a_clean_object_keeps_its_colour(self):
+        material, extras = self.named(self.build(), "BENCH-01")
+        self.assertEqual(self.colour(material), glb._linear(glb.colour_of("bench")))
+        self.assertEqual(extras, {})
+
+    def test_clear_zones_are_painted_see_through(self):
+        nodes = self.build()
+        material, _ = nodes["EYE-01 clear zone"]
+        self.assertEqual(material["alphaMode"], "BLEND")
+        self.assertLess(self.colour(material)[3], 1)
+
+    def test_painted_on_the_floor_not_a_block_of_air(self):
+        js, _ = read(glb.write_models(self.lab, checks.run(self.lab), self.tmp, ["LAB-A"])[0][0])
+        mesh = next(m for m in js["meshes"] if m["name"] == "EYE-01 clear zone")
+        pos = js["accessors"][mesh["primitives"][0]["attributes"]["POSITION"]]
+        self.assertLess(pos["max"][1] - pos["min"][1], 0.02)  # a centimetre of paint, not a person-tall volume
+
+    def test_plain_leaves_the_checks_out(self):
+        nodes = self.build(plain=True)
+        self.assertFalse([k for k in nodes if "clear zone" in k])
+        material, _ = self.named(nodes, "CART-02")
+        self.assertEqual(self.colour(material), glb._linear(glb.colour_of("cart")))
+
+    def test_the_layout_as_drawn(self):
+        """Drag CART-01 across the room in the drawing, don't pull, and model it: purple where it went, a ghost
+        where it is now, and a file of its own so the current model is left alone."""
+        from labmap import layout
+        import xml.etree.ElementTree as ET
+
+        layout.write_layouts(self.lab, checks.run(self.lab))
+        path = layout.layout_path(self.tmp)
+        tree = ET.parse(path)
+        g = next(e for e in tree.iter("{http://www.w3.org/2000/svg}g") if e.get("id") == layout.PREFIX + "CART-01")
+        g.set("transform", "translate(0,-60) " + (g.get("transform") or ""))
+        tree.write(path)
+        moves, _ = layout.layout_moves(self.lab)
+        self.assertIn("CART-01", moves["placeables"])
+        drawn = model.load(self.tmp, moves)
+        built = glb.write_models(drawn, checks.run(drawn), self.tmp, ["LAB-A"], before=self.lab, suffix="-layout")
+        self.assertEqual(built[0][0].name, "LAB-A-layout.glb")
+        nodes = self.nodes(built[0][0])
+        material, extras = self.named(nodes, "CART-01")
+        self.assertEqual(self.colour(material), glb._linear(glb.MOVED))
+        self.assertTrue(extras.get("moved"))
+        ghost, _ = nodes["CART-01 (was here)"]
+        self.assertEqual(ghost["alphaMode"], "BLEND")
+        self.assertNotIn("BENCH-01 (was here)", nodes)  # nothing else moved
+
+    def test_moved_between_counts_what_was_carried_along(self):
+        before = G.place_all(self.lab)[0]
+        after = G.place_all(model.load(self.tmp, {"placeables": {"BENCH-02": {"x": 500}}}))[0]
+        moved = glb.moved_between(before, after)
+        self.assertIn("BENCH-02", moved)
+        self.assertTrue({i for i in moved if self.lab.placeables[i].get("parent") == "BENCH-02"})  # its drawers
+        self.assertNotIn("BENCH-01", moved)
+
+
 class FromTheExample(unittest.TestCase):
     """The example has the awkward cases: a profile footprint, a diagonal piece, a fume hood with a working space."""
 

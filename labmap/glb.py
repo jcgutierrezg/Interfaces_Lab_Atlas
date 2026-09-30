@@ -12,6 +12,10 @@ y, which goes down the drawing, runs to Z, so the model is the plan seen from ab
 Walls stop at waist height by default, a dollhouse view: full-height walls hide the room from every angle outside
 it, and cutting real openings for doors and windows would need solid modelling for no real gain. Enclosures with a
 working space inside (inner_w, inner_d) are built as a shell around it, open at the front, so you can see in.
+
+It is also a way of reading the checks: what they flag is coloured the way the report outlines it, clear zones
+are painted on the floor, and a model of the arrangement drawn in Inkscape (model --layout) colours what a pull
+would move, with a see-through ghost where each thing stands now. --plain leaves all that out, for sending.
 """
 from __future__ import annotations
 
@@ -20,6 +24,7 @@ import struct
 from pathlib import Path
 
 from . import geometry as G
+from .checks import zones
 from .layout import FILL
 
 CM = 0.01  # glTF is metres
@@ -34,6 +39,10 @@ SOLID = {  # where deepening the plan's colour isn't enough to tell things apart
     "fume-hood": "#7d8a96", "glovebox": "#7d8a96", "computer": "#8f7bc0", "monitor": "#8f7bc0",
 }
 SHADE = {"top": 1.0, "bottom": 0.5}  # a flat model needs its faces telling apart: the top is the lit one
+PROBLEM, WARNING = "#c62828", "#e08a00"  # as the report outlines them
+MOVED = GHOST = "#7e57c2"  # what a pending pull would move, and see-through where it stands now
+ZONE = "#f2c200"  # hazard-tape yellow, see-through
+MARK = (0.3, 1.3)  # cm above the surface a clear zone is painted on: clear of it, so the two don't flicker
 
 
 def _hsl(r, g, b):
@@ -141,8 +150,9 @@ class Mesh:
 
 
 def write(nodes, path):
-    """Write {name: (Mesh, colour)} as a .glb. One material per colour, one mesh per node, no transforms: the
-    geometry is already in room coordinates."""
+    """Write {name: (Mesh, colour[, alpha[, extras]])} as a .glb. One material per colour and opacity, one mesh
+    per node, no transforms: the geometry is already in room coordinates. extras rides along on the node (what the
+    checks said about it), where a viewer that knows to look can find it."""
     buf, views, accessors, meshes, materials, out, colours = bytearray(), [], [], [], [], [], {}
 
     def chunk(fmt, values, target):
@@ -153,14 +163,20 @@ def write(nodes, path):
         views.append({"buffer": 0, "byteOffset": start, "byteLength": len(buf) - start, "target": target})
         return len(views) - 1
 
-    for name, (mesh, colour) in nodes.items():
+    for name, (mesh, colour, *rest) in nodes.items():
         if not mesh:
             continue
-        key = colour or DEFAULT
+        alpha = rest[0] if rest else 1.0
+        extras = rest[1] if len(rest) > 1 else None
+        key = (colour or DEFAULT, alpha)
         if key not in colours:
-            materials.append({"name": key, "doubleSided": True,
-                              "pbrMetallicRoughness": {"baseColorFactor": _linear(key), "metallicFactor": 0.0,
-                                                       "roughnessFactor": 0.75}})
+            base = _linear(key[0])[:3] + [alpha]
+            material = {"name": key[0] if alpha == 1 else f"{key[0]} {alpha:g}", "doubleSided": True,
+                        "pbrMetallicRoughness": {"baseColorFactor": base, "metallicFactor": 0.0,
+                                                 "roughnessFactor": 0.75}}
+            if alpha < 1:
+                material["alphaMode"] = "BLEND"  # see-through: clear zones, and where moved things used to be
+            materials.append(material)
             colours[key] = len(materials) - 1
         xyz = [mesh.pos[k::3] for k in range(3)]
         accessors.append({"bufferView": chunk("f", mesh.pos, 34962), "componentType": 5126, "type": "VEC3",
@@ -175,7 +191,7 @@ def write(nodes, path):
                                                                     "NORMAL": len(accessors) - 3,
                                                                     "COLOR_0": len(accessors) - 2},
                                                      "indices": len(accessors) - 1, "material": colours[key]}]})
-        out.append({"name": name, "mesh": len(meshes) - 1})
+        out.append({"name": name, "mesh": len(meshes) - 1, **({"extras": extras} if extras else {})})
     gltf = {"asset": {"version": "2.0", "generator": "labmap"}, "scene": 0,
             "scenes": [{"nodes": list(range(len(out)))}], "nodes": out, "meshes": meshes, "materials": materials,
             "accessors": accessors, "bufferViews": views, "buffers": [{"byteLength": len(buf)}]}
@@ -233,9 +249,41 @@ def room(lab, rid, walls=WALL_H):
     return out
 
 
-def scene(lab, rid, geo, walls=WALL_H):
-    """({name: (Mesh, colour)}, ids with no geometry to draw) for one room."""
+def _zones(r, g, person):
+    """The space i needs kept clear, painted on whatever it stands on like hazard tape on a lab floor: a volume
+    would fill the room with red haze, since in front of anything on the floor that space is a person tall. Room
+    kept above something (clear_top: a sash, a lid) is the exception, and is drawn as the volume it is."""
+    mesh = Mesh()
+    for side, poly, (z0, z1) in zones(r, g, person):
+        if side == "top":
+            mesh.prism(poly, z0, z1)
+        else:
+            mesh.prism(poly, z0 + MARK[0], z0 + MARK[1])
+    return mesh
+
+
+def moved_between(before, after):
+    """Ids whose place in the room changed between two sets of geometry, carried along or moved themselves,
+    arriving or leaving. Half a centimetre is rounding, not a move."""
+    def spot(g):
+        return g.room, tuple(sorted((round(x * 2), round(y * 2)) for x, y in g.poly)), round(g.z[0]), round(g.z[1])
+
+    placed = lambda geo: {i: spot(g) for i, g in geo.items() if g and g.poly}
+    a, b = placed(before), placed(after)
+    return {i for i in set(a) | set(b) if a.get(i) != b.get(i)}
+
+
+def scene(lab, rid, geo, walls=WALL_H, flagged=None, moved=(), ghosts=None, person=200):
+    """({name: (Mesh, colour[, alpha, extras])}, ids with no geometry to draw) for one room.
+
+    flagged is {id: (messages, is a problem)} from the checks, and colours those objects the way the report
+    outlines them. moved is what a pending pull would move, drawn in its own colour; ghosts is their old geometry,
+    drawn see-through where they stand now. Pass neither for a plain model to send to someone."""
     nodes, skipped = room(lab, rid, walls), []
+    plain, flagged = flagged is None, flagged or {}
+    for i, g in (ghosts or {}).items():
+        if g and g.poly and g.room == rid:
+            nodes[f"{i} (was here)"] = (Mesh().prism(g.poly, *g.z), GHOST, 0.28)
     for i, r in lab.placeables.items():
         if r.get("room") != rid or i in lab.gone:
             continue
@@ -255,18 +303,36 @@ def scene(lab, rid, geo, walls=WALL_H):
                 z0 += fu  # the top only, floating: a bench that fills its own leg room hides what is parked there
             mesh.prism(g.poly, z0, z1)
         name = f"{i} {r.get('name')}" if r.get("name") else i
-        nodes[name] = (mesh, colour_of(r.get("category")))
+        msgs, bad = flagged.get(i, ([], False))
+        colour = PROBLEM if bad else MOVED if i in moved else WARNING if msgs else colour_of(r.get("category"))
+        notes = {k: v for k, v in (("findings", msgs), ("moved", i in moved)) if v}
+        nodes[name] = (mesh, colour, 1.0, notes or None)
+        if not plain:
+            clear = _zones(r, g, person)
+            if clear:
+                nodes[f"{i} clear zone"] = (clear, ZONE, 0.45)
     return nodes, skipped
 
 
-def write_models(lab, res, folder=None, rooms=None, walls=WALL_H):
-    """A .glb per room in build/model. Returns [(path, how many objects, ids skipped)]."""
+def write_models(lab, res, folder=None, rooms=None, walls=WALL_H, plain=False, before=None, suffix=""):
+    """A .glb per room in build/model. Returns [(path, how many objects, ids skipped)].
+
+    Unless plain, what the checks flag is coloured and clear zones are painted in. before is the lab as it was,
+    for a model of the arrangement drawn in Inkscape: what moved is coloured, with a ghost where it came from."""
+    from .layout import _flagged
+
     geo = getattr(res, "geo", None) or G.place_all(lab)[0]
+    old = G.place_all(before)[0] if before is not None else {}
+    moved = moved_between(old, geo) if before is not None else set()
+    flagged = {} if plain else _flagged(lab, res)
     out = []
     for rid in (rooms or lab.rooms):
         if rid not in lab.rooms:
             continue
-        nodes, skipped = scene(lab, rid, geo, walls)
-        path = Path(folder or lab.folder) / "build" / "model" / f"{rid}.glb"
-        out.append((write(nodes, path), sum(1 for m, _ in nodes.values() if m), skipped))
+        nodes, skipped = scene(lab, rid, geo, walls, None if plain else flagged, moved,
+                               {i: old[i] for i in moved if old.get(i)}, lab.settings["person_height"])
+        path = Path(folder or lab.folder) / "build" / "model" / f"{rid}{suffix}.glb"
+        things = [k for k, n in nodes.items() if n[0] and not k.endswith((" clear zone", " (was here)"))
+                  and k not in (f"{rid} floor", f"{rid} walls")]
+        out.append((write(nodes, path), len(things), skipped))
     return out

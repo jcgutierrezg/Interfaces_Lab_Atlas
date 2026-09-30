@@ -200,10 +200,26 @@ def _model(args):
     if rooms and any(r not in lab.placeables and r not in lab.rooms for r in rooms):
         print(f"Rooms on the rooms sheet: {', '.join(lab.rooms)}")
         return 2
-    built = glb.write_models(lab, checks.run(lab), folder, rooms, args.walls)
+    before, suffix = None, ""
+    if args.layout:
+        from . import layout
+
+        moves, notes = layout.layout_moves(lab)
+        n = layout.count(moves)
+        print(f"Modelling the layout as drawn: {n} change(s) not pulled yet, in purple, with a ghost where each "
+              f"thing stands now. Nothing is written to lab-data.xlsx.")
+        _print_moves(lab, moves, notes)
+        before, lab = lab, _load(folder, moves)
+        if lab is None:
+            return 2
+        suffix = "-layout"
+    built = glb.write_models(lab, checks.run(lab), folder, rooms, args.walls, args.plain, before, suffix)
     if not built:
         print("No rooms to model: the rooms sheet is empty, or none of them has an outline yet.")
         return 2
+    if not args.plain:
+        print("Red: a problem. Amber: a warning. Yellow on the floor: space that has to stay clear."
+              + (" Purple: moved in the drawing." if args.layout else ""))
     for path, parts, skipped in built:
         print(f"{path.stem}: {parts} part(s)  {path.resolve()}")
         if skipped:
@@ -368,6 +384,11 @@ def main(argv=None):
     md.add_argument("--room", help="one room, or several separated by commas (default: all of them)")
     md.add_argument("--walls", type=int, default=120,
                     help="wall height in cm, so you can see in from outside (default 120; 0 for no walls)")
+    md.add_argument("--layout", action="store_true",
+                    help="model the arrangement drawn in the Inkscape layout, before pulling it: what moved is "
+                         "coloured, with a ghost where it stands now (writes <ROOM>-layout.glb, nothing else)")
+    md.add_argument("--plain", action="store_true",
+                    help="no problems, warnings or clear zones: just the room, to send to someone")
     md.add_argument("--open", action="store_true", help="open the folder it's in")
     md.set_defaults(run=_model)
     ls = sub.add_parser("lists", help="copy list values the blank template has gained (a new category, say) into "
