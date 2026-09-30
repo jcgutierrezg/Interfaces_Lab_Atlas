@@ -67,6 +67,18 @@ class Pages(unittest.TestCase):
         self.assertEqual({self.d["pick"][k] for k in self.d["idx"][start:start + count]}, {0})
         self.assertIsNone(self.d["objects"][0])
 
+    def test_a_clear_zone_belongs_to_its_thing(self):
+        """So a selected thing keeps its own zone when everything else fades, and nobody else's."""
+        start, count = self.d["ranges"]["zones"]
+        owners = {self.d["objects"][self.d["pick"][k]]["id"] for k in self.d["idx"][start:start + count]}
+        self.assertIn("EYE-01", owners)
+        self.assertNotIn(0, {self.d["pick"][k] for k in self.d["idx"][start:start + count]})
+
+    def test_the_pin_knows_where_to_hang(self):
+        for o in self.d["objects"][1:]:
+            self.assertGreaterEqual(o["top"], o["c"][1], o["id"])  # the top of a thing is above its middle
+            self.assertGreater(o["r"], 0, o["id"])
+
     def test_what_the_checks_flag_says_so(self):
         cart = next(o for o in self.d["objects"][1:] if o["id"] == "CART-02")
         self.assertTrue(cart["bad"])

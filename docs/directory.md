@@ -46,6 +46,11 @@ server and no internet. It has:
   painted yellow, and benches float over their leg room so you can see what's parked under them. It draws with the
   browser's own WebGL, so it works off a shared drive with no internet and nothing to install; the room's `.glb` is
   beside it, for Open3D Viewer or Blender. See [The 3D model](3d-model.md).
+- **Finding something in 3D**: *see it in 3D* on an object's page, or clicking it in the model, marks it the way
+  the plan does. Everything else fades to a faint grey ghost, so a freezer under a bench or a box behind a
+  cupboard shows through. The thing itself flashes yellow and orange, a crimson pin bobs above it (drawn over
+  everything, so walls never hide it), and a ring spreads out from its top; its own clear zone stays painted.
+  *Fade the rest* turns the fading off, and × on its card, a click on empty floor or *Reset view* lets it go.
 - A copy of the check report.
 
 Photos are shrunk copies (your originals in `photos/` are never changed). Rebuild the site whenever the

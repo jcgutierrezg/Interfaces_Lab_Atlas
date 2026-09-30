@@ -70,8 +70,12 @@ def room_data(lab, res, rid, href):
                 number[i] = len(objects)
                 objects.append({"id": i, "name": r.get("name") or "", "cat": r.get("category") or "",
                                 "find": msgs, "bad": bad, "href": href(i),
-                                "c": [round((min(v) + max(v)) / 2, 3) for v in (xs, ys, zs)]})
+                                "c": [round((min(v) + max(v)) / 2, 3) for v in (xs, ys, zs)],
+                                "top": round(max(ys), 3),  # where the pin hangs from, and the ring spreads out
+                                "r": round(max(max(xs) - min(xs), max(zs) - min(zs)) / 2, 3)})
             n = number[i]
+        elif layer == "zones":
+            n = number.get(i, 0)  # its owner's: a selected thing keeps its own clear zone when the rest fades
         pick += [n] * (len(mesh.pos) // 3)
         faces[layer] += [first + k for k in mesh.idx]
     index, ranges = [], {}
@@ -94,7 +98,9 @@ def page_body(lab, res, rid, href, room_href, glb_name):
             f"<a href='{esc(glb_name)}' download>download the model</a> for Open3D Viewer or Blender</p>"
             "<div class='v3d'><canvas id='v3d' aria-label='3D model of the room'></canvas>"
             "<div class='v3d-bar'><button data-layer='walls' class='on'>Walls</button>"
-            "<button data-layer='zones' class='on'>Clear zones</button><button id='v3d-reset'>Reset view</button>"
+            "<button data-layer='zones' class='on'>Clear zones</button>"
+            "<button data-layer='focus' class='on' title='When something is selected, show everything else as a "
+            "faint ghost'>Fade the rest</button><button id='v3d-reset'>Reset view</button>"
             "<span class='v3d-help'>Drag to turn · right-drag or Shift-drag to move · scroll to zoom · "
             "click a thing</span></div><div id='v3d-info' hidden></div>"
             f"<p id='v3d-none' hidden>This browser can't show 3D. <a href='{esc(glb_name)}' download>Download the "
@@ -119,6 +125,9 @@ CSS = """
             border: 1px solid #d1d9e0; border-radius: 8px; padding: 10px 12px; box-shadow: 0 2px 10px rgba(0,0,0,.12);
             font-size: 14px; }
 #v3d-info .cat { color: #59636e; font-size: 12px; }
+#v3d-info .x { position: absolute; top: 4px; right: 6px; border: 0; background: none; font-size: 18px; line-height: 1;
+               color: #59636e; cursor: pointer; padding: 2px 4px; }
+#v3d-info strong { color: #e11d48; }
 #v3d-info ul { margin: 6px 0 0; padding-left: 18px; }
 #v3d-info li.bad { color: #b42318; } #v3d-info li { color: #93370d; }
 @media (max-width: 640px) {  /* on a phone the card would cover what was just tapped: put it under the model */
@@ -149,34 +158,68 @@ JS = r"""
   }
   var prog = gl.createProgram();
   gl.attachShader(prog, shader(gl.VERTEX_SHADER, '#version 300 es\n' +
-    'in vec3 aPos; in vec3 aCol; in float aPick; uniform mat4 uMVP;\n' +
+    'in vec3 aPos; in vec3 aCol; in float aPick; uniform mat4 uMVP; uniform vec3 uShift; uniform float uScale;\n' +
     'out vec3 vCol; out vec3 vPos; flat out float vPick;\n' +
-    'void main() { vCol = aCol; vPos = aPos; vPick = aPick; gl_Position = uMVP * vec4(aPos, 1.0); }'));
+    'void main() { vec3 p = aPos * uScale + uShift; vCol = aCol; vPos = p; vPick = aPick;\n' +
+    '              gl_Position = uMVP * vec4(p, 1.0); }'));
   gl.attachShader(prog, shader(gl.FRAGMENT_SHADER, '#version 300 es\nprecision highp float;\n' +
-    'in vec3 vCol; in vec3 vPos; flat in float vPick; uniform float uAlpha; uniform float uPicked; uniform int uMode;\n' +
+    'in vec3 vCol; in vec3 vPos; flat in float vPick;\n' +
+    'uniform float uAlpha; uniform float uPicked; uniform int uMode; uniform int uFocus; uniform float uPulse;\n' +
     'out vec4 o;\n' +
     'void main() {\n' +
     '  if (uMode == 1) { o = vec4(mod(vPick, 256.0) / 255.0, floor(vPick / 256.0) / 255.0, 0.0, 1.0); return; }\n' +
-    '  vec3 n = normalize(cross(dFdx(vPos), dFdy(vPos)));\n' +          // flat faces: the normal from the slope
+    '  bool mine = uPicked > 0.5 && abs(vPick - uPicked) < 0.5;\n' +
+    '  if (uFocus == 1 && !mine) discard;\n' +                    // the selected thing on its own...
+    '  if (uFocus == 2 && mine) discard;\n' +                     // ...and everything else, as a ghost
+    '  vec3 n = normalize(cross(dFdx(vPos), dFdy(vPos)));\n' +    // flat faces: the normal from the slope
     '  vec3 c = vCol * (0.8 + 0.2 * abs(dot(n, normalize(vec3(0.45, 0.8, 0.35)))));\n' +
-    '  if (uPicked > 0.5 && abs(vPick - uPicked) < 0.5) c = mix(c, vec3(1.0, 0.93, 0.35), 0.5);\n' +
+    '  if (mine) c = mix(c, mix(vec3(1.0, 0.85, 0.3), vec3(1.0, 0.54, 0.24), uPulse), 0.6);\n' +  // the 2D flash
+    '  if (uFocus == 2) { float g = dot(c, vec3(0.3, 0.59, 0.11)); c = mix(vec3(g), c, 0.3); }\n' +
     '  o = vec4(c, uAlpha);\n' +
     '}'));
   gl.linkProgram(prog);
   if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
   gl.useProgram(prog);
-  var U = {}; ['uMVP', 'uAlpha', 'uPicked', 'uMode'].forEach(function (n) { U[n] = gl.getUniformLocation(prog, n); });
+  var U = {};
+  ['uMVP', 'uAlpha', 'uPicked', 'uMode', 'uFocus', 'uPulse', 'uShift', 'uScale'].forEach(function (n) {
+    U[n] = gl.getUniformLocation(prog, n);
+  });
 
-  var vao = gl.createVertexArray(); gl.bindVertexArray(vao);
   function attr(name, data, size, type, norm) {
     var b = gl.createBuffer(), loc = gl.getAttribLocation(prog, name);
     gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
     gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, size, type, norm, 0, 0);
   }
+  var vao = gl.createVertexArray(); gl.bindVertexArray(vao);
   attr('aPos', pos, 3, gl.FLOAT, false);
   attr('aCol', col, 3, gl.UNSIGNED_BYTE, true);
   attr('aPick', pick, 1, gl.UNSIGNED_SHORT, false);
   var ib = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
+
+  // --- the pin and the ring, as on the 2D map: a unit shape, moved and sized when drawn -------------------------------
+  function shape(points, rgb) {
+    var n = points.length / 3, cols = new Uint8Array(n * 3), none = new Uint16Array(n), v = gl.createVertexArray();
+    for (var k = 0; k < n; k++) { var s = 0.72 + 0.28 * ((k / 3 | 0) % 3) / 2; cols.set([rgb[0] * s, rgb[1] * s, rgb[2] * s], k * 3); }
+    gl.bindVertexArray(v);
+    attr('aPos', new Float32Array(points), 3, gl.FLOAT, false);
+    attr('aCol', cols, 3, gl.UNSIGNED_BYTE, true);
+    attr('aPick', none, 1, gl.UNSIGNED_SHORT, false);
+    return {vao: v, count: n};
+  }
+  var pinPts = [], w = 0.32, corner = [[-w, -w], [w, -w], [w, w], [-w, w]];
+  for (var k = 0; k < 4; k++) {                    // a point pushed into the top of what it marks, four faces and a lid
+    var a = corner[k], b = corner[(k + 1) % 4];
+    pinPts.push(0, 0, 0, a[0], 1, a[1], b[0], 1, b[1]);
+  }
+  pinPts.push(-w, 1, -w, w, 1, -w, w, 1, w, -w, 1, -w, w, 1, w, -w, 1, w);
+  var ringPts = [], seg = 48;
+  for (var k = 0; k < seg; k++) {                 // a flat band round a unit circle
+    var t0 = k / seg * 2 * Math.PI, t1 = (k + 1) / seg * 2 * Math.PI, i0 = 0.86, o0 = 1;
+    var p = [Math.cos(t0), Math.sin(t0), Math.cos(t1), Math.sin(t1)];
+    ringPts.push(p[0] * i0, 0, p[1] * i0, p[0] * o0, 0, p[1] * o0, p[2] * o0, 0, p[3] * o0,
+                 p[0] * i0, 0, p[1] * i0, p[2] * o0, 0, p[3] * o0, p[2] * i0, 0, p[3] * i0);
+  }
+  var PIN = shape(pinPts, [225, 29, 72]), RING = shape(ringPts, [225, 29, 72]);
 
   // --- camera: turning round a point on the floor ---------------------------------------------------------------
   var box = D.box, cx = (box[0] + box[2]) / 2, cz = (box[1] + box[3]) / 2,
@@ -199,29 +242,64 @@ JS = r"""
   }
 
   // --- drawing ----------------------------------------------------------------------------------------------------
-  var show = {walls: true, zones: true}, picked = 0, pickFb = null, pickTex = null, pickDepth = null, pw = 0, ph = 0;
+  var show = {walls: true, zones: true, focus: true}, picked = 0;
+  var pickFb = null, pickTex = null, pickDepth = null, pw = 0, ph = 0, born = performance.now();
   function size() {
     var r = window.devicePixelRatio || 1, w = Math.round(cv.clientWidth * r), h = Math.round(cv.clientHeight * r);
     if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
   }
   function range(layer) { var r = D.ranges[layer]; if (r[1]) gl.drawElements(gl.TRIANGLES, r[1], gl.UNSIGNED_INT, r[0] * 4); }
+  function set(focus, alpha) { gl.uniform1i(U.uFocus, focus); gl.uniform1f(U.uAlpha, alpha); }
+  function place(x, y, z, s) { gl.uniform3f(U.uShift, x, y, z); gl.uniform1f(U.uScale, s); }
+  function blend(on) {
+    if (on) { gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false); }
+    else { gl.disable(gl.BLEND); gl.depthMask(true); }
+  }
   function draw(mode) {
     size();
     gl.viewport(0, 0, cv.width, cv.height);
     var mvp = mul(persp(0.8, cv.width / cv.height, cam.dist * 0.02, cam.dist * 8 + span * 4), lookAt(eye(), cam.t));
+    var secs = (performance.now() - born) / 1000, o = D.objects[picked];
     gl.uniformMatrix4fv(U.uMVP, false, mvp);
-    gl.uniform1i(U.uMode, mode); gl.uniform1f(U.uPicked, picked); gl.uniform1f(U.uAlpha, 1);
+    gl.uniform1i(U.uMode, mode); gl.uniform1f(U.uPicked, picked);
+    gl.uniform1f(U.uPulse, 0.5 + 0.5 * Math.sin(secs * Math.PI / 0.45));   // flashing, as fast as the 2D mark
+    gl.bindVertexArray(vao); place(0, 0, 0, 1); set(0, 1);
     gl.clearColor(mode ? 0 : 0.933, mode ? 0 : 0.945, mode ? 0 : 0.957, 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    gl.enable(gl.DEPTH_TEST); gl.disable(gl.BLEND); gl.depthMask(true);
-    range('floor'); if (show.walls) range('walls'); range('things');
-    if (mode === 0 && show.zones) {               // see-through last, over everything solid, without hiding it
-      gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
-      gl.uniform1f(U.uAlpha, 0.45); range('zones'); gl.depthMask(true);
+    gl.enable(gl.DEPTH_TEST); blend(false);
+    range('floor');
+    if (mode === 1 || !o || !show.focus) {
+      if (show.walls) range('walls');
+      range('things');
+      if (mode === 0 && show.zones) { blend(true); set(0, 0.45); range('zones'); blend(false); }
+    } else {                                       // the selected thing solid, and everything else a faint ghost
+      set(1, 1); range('things');
+      blend(true);
+      if (show.zones) { set(1, 0.5); range('zones'); }   // ...keeping its own clear zone
+      set(2, 0.13); if (show.walls) range('walls'); range('things');
+      blend(false); set(0, 1);
     }
+    if (mode === 1 || !o) return;
+    var ring = (secs % 1.4) / 1.4, r = Math.max(o.r, 0.15);
+    blend(true); set(0, 0.9 * (1 - ring));         // a ring spreading out from its top, and fading
+    gl.bindVertexArray(RING.vao); place(o.c[0], o.top + 0.005, o.c[2], r * (0.7 + 1.3 * ring));
+    gl.drawArrays(gl.TRIANGLES, 0, RING.count);
+    blend(false); set(0, 1); gl.disable(gl.DEPTH_TEST);   // and the pin, bobbing above it, in front of everything
+    var tall = Math.max(0.28, Math.min(0.6, span * 0.05));
+    gl.bindVertexArray(PIN.vao); place(o.c[0], o.top + 0.06 + tall * 0.25 * (0.5 + 0.5 * Math.sin(secs * Math.PI / 0.9)), o.c[2], tall);
+    gl.drawArrays(gl.TRIANGLES, 0, PIN.count);
+    gl.enable(gl.DEPTH_TEST); gl.bindVertexArray(vao); place(0, 0, 0, 1);
   }
-  var queued = false;
-  function redraw() { if (!queued) { queued = true; requestAnimationFrame(function () { queued = false; draw(0); }); } }
+  var queued = false, running = false;
+  function loop() {                                // keeps going while something is selected: it moves
+    if (!picked) { running = false; draw(0); return; }
+    draw(0); requestAnimationFrame(loop);
+  }
+  function redraw() {
+    if (running) return;
+    if (picked) { running = true; requestAnimationFrame(loop); return; }
+    if (!queued) { queued = true; requestAnimationFrame(function () { queued = false; draw(0); }); }
+  }
 
   function pickAt(px, py) {           // draw each thing in its own number, and read back the one under the pointer
     size();
@@ -248,11 +326,17 @@ JS = r"""
   function select(n, fly) {
     picked = n;
     var o = D.objects[n];
-    if (!o) { info.hidden = true; redraw(); return; }
-    info.innerHTML = '<strong>' + esc(o.id) + '</strong> ' + esc(o.name) + '<div class="cat">' + esc(o.cat) + '</div>' +
+    if (!o) {
+      picked = 0; info.hidden = true;
+      if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+      redraw(); return;
+    }
+    info.innerHTML = '<button class="x" aria-label="Clear the selection">×</button>' +
+      '<strong>' + esc(o.id) + '</strong> ' + esc(o.name) + '<div class="cat">' + esc(o.cat) + '</div>' +
       (o.find.length ? '<ul>' + o.find.map(function (f) { return '<li class="' + (o.bad ? 'bad' : '') + '">' + esc(f) + '</li>'; }).join('') + '</ul>' : '') +
       '<p><a href="' + esc(o.href) + '">Open its page →</a></p>';
     info.hidden = false;
+    info.querySelector('.x').addEventListener('click', function () { select(0); });
     if (fly) {                                     // from well above, so a column or a tall cupboard is less in the way
       cam.t = [o.c[0], Math.max(0.2, o.c[1]), o.c[2]]; cam.dist = Math.max(1.8, span * 0.5); cam.phi = Math.max(cam.phi, 1.05);
     }
