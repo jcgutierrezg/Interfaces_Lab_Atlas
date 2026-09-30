@@ -311,9 +311,12 @@ def write(res, path, banner=None, before=None, moves=None):
         chips.append(f"<span class='chip warn'>{len(warnings)} warning{'' if len(warnings) == 1 else 's'}</span>")
     if data:
         chips.append(f"<span class='chip bad'>{len(data)} data problem{'' if len(data) == 1 else 's'}</span>")
+    if res.accepted:
+        chips.append(f"<span class='chip'>{len(res.accepted)} accepted, not counted</span>")
     out.append("<div class='chips'>" + "".join(chips) + "</div>")
-    sections = ["Problems", "Warnings", "Progress", "Rooms", "Bench space", "Fume hoods", "Power", "Connections", "Documents",
-                "Spare parts", "Triage", "Decommissioning", "Workflow groups", "Containers", "Not placed yet"]
+    sections = ["Problems", "Warnings"] + (["Accepted"] if res.accepted or res.lapsed else []) + [
+        "Progress", "Rooms", "Bench space", "Fume hoods", "Power", "Connections", "Documents",
+        "Spare parts", "Triage", "Decommissioning", "Workflow groups", "Containers", "Not placed yet"]
     if before is not None:
         sections = ["Compared", "Move list"] + sections
     out.append("<nav>" + "".join(f"<a href='#{s.lower().replace(' ', '-')}'>{s}</a>" for s in sections) + "</nav>")
@@ -332,8 +335,28 @@ def write(res, path, banner=None, before=None, moves=None):
             out.append(f"<p class='ok'>{empty}</p>")
         for rule, found in found_by_rule.items():
             name, what, _ = describe(rule, lab.settings)
-            out.append(f"<h3>{esc(name)} ({len(found)})</h3><p class='note'>{esc(what)}</p>")
-            out.append(table(["Room", heading[:-1]], [(f.room or "", f.message) for f in found], "problems"))
+            out.append(f"<h3>{esc(name)} ({len(found)}) <code class='rule'>{esc(rule)}</code></h3>"
+                       f"<p class='note'>{esc(what)}</p>")
+            if rule == "data":  # a mistake in the spreadsheet: put it right, there's nothing to accept
+                out.append(table(["Room", heading[:-1]], [(f.room or "", f.message) for f in found], "problems"))
+            else:
+                out.append(table(["Room", heading[:-1], "To live with it (accepted sheet)"],
+                                 [(f.room or "", f.message, ("html", f"<code>{esc(rule)}</code> "
+                                                                     f"<code>{esc(', '.join(f.ids))}</code>"))
+                                  for f in found], "problems"))
+    if res.accepted or res.lapsed:
+        out.append("<h2 id='accepted'>Accepted</h2><p class='note'>Problems and warnings someone has decided to "
+                   "live with, on the accepted sheet of lab-data.xlsx. They aren't counted above or outlined on the "
+                   "plans. One with an until date comes back when the date passes.</p>")
+        out.append(table(["Rule", "What", "Why it's accepted", "By", "Until"],
+                         [(describe(f.rule, lab.settings)[0], f.message, a.get("reason") or "", a.get("by") or "",
+                           a.get("until") or "") for f, a in res.accepted]))
+        if res.lapsed:
+            out.append("<p class='note'>These have passed their until date, so what they covered counts again: "
+                       "renew them or delete them.</p>")
+            out.append(table(["Rule", "Things", "Why it was accepted", "Until"],
+                             [(a.get("rule"), ", ".join(a.get("ids") or []), a.get("reason") or "", a.get("until"))
+                              for a in res.lapsed]))
 
     out.append("<h2 id='progress'>Progress</h2><p class='note'>How much of the data is filled in. "
                "Missing data isn't a problem, but the checks can only see what's there.</p>")

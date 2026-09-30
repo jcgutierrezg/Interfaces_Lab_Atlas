@@ -207,6 +207,13 @@ underneath (`free_under` at least its height) and none of it sticks out.
 To stop working space being silently used up, add it as an object: category `workspace`, `mount = on`, with `h` =
 the headroom you need (see `WS-01`).
 
+## Accepting a problem
+
+The **`accepted`** sheet holds problems you've decided to live with: `rule` and `ids` say which (copy them from the
+report's *To live with it* column), `reason` says why, `by` who, and `until` for how long. They're left out of the
+count and off the plans, and listed in the report under *Accepted*. See
+[Problems you've decided to live with](checks.md#problems-youve-decided-to-live-with).
+
 ## Doors and keeping things apart
 
 - **Doors on things:** see [Measuring protocol](collecting-data.md#measuring-protocol). For the room's own doors, a `door`-category object: its `w` and `h`

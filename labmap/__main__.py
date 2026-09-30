@@ -55,10 +55,11 @@ def _summary(res, show):
     problems = sum(len(v) for k, v in groups.items() if k != "data")
     warnings = sum(len(v) for v in warned.values())
     print(f"{problems} problem{'' if problems == 1 else 's'}, {warnings} warning{'' if warnings == 1 else 's'}" +
-          (f", {len(groups['data'])} data problem{'' if len(groups['data']) == 1 else 's'}" if "data" in groups else ""))
+          (f", {len(groups['data'])} data problem{'' if len(groups['data']) == 1 else 's'}" if "data" in groups else "") +
+          (f" ({len(res.accepted)} accepted, not counted)" if res.accepted else ""))
     for rule, found in {**groups, **warned}.items():
         name, _, level = describe(rule, res.lab.settings)
-        print(f"  {name} ({len(found)}{', warning' if level == 'warning' else ''})")
+        print(f"  {name} ({len(found)}{', warning' if level == 'warning' else ''})  [{rule}]")
         for f in found[:show]:
             print(f"    - {f.message}")
         if len(found) > show:

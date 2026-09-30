@@ -165,6 +165,14 @@ KEEP_APART = [
     col("level", "dropdown", "problem or warning.", True, "list:level", 9),
     col("why", "", "Shown in the report.", False, "text", 60),
 ]
+ACCEPTED = [  # no dropdowns: copied into another workbook, a dropdown's named range would link back to this one
+    col("rule", "e.g. clear-zone", "The check, as the report names it beside the problem: clear-zone, overlap, headroom... The report's 'To live with it' column has it ready to copy.", True, "text", 16),
+    col("ids", "e.g. CAB-18-01, DOOR-18", "The things involved, separated by commas. Name both to accept that pair only; name one to accept this rule wherever that thing is involved.", True, "text", 26),
+    col("reason", "why it's all right", "Why it's accepted, for whoever reads the report next.", True, "text", 50),
+    col("by", "who", "Who decided.", False, "text", 14),
+    col("until", "date, or blank", "Blank = for good. After this date it counts as a problem again: a reminder to look at it afresh.", False, "date", 12),
+    col("notes", "", "", False, "text", 30),
+]
 DEFAULT_ROWS = {  # rows the empty template starts with too
     "keep_apart": [
         dict(tag="vibrates", away_from="vibration-sensitive", distance=100, level="warning",
@@ -198,4 +206,5 @@ SHEETS = [
     ("items", "7030A0", "C3", 5000, ITEMS, "Pass 6 - drawers"),
     ("documents", "B42318", "B3", 500, DOCUMENTS, "Any time - forms and certificates"),
     ("keep_apart", "595959", "A3", 100, KEEP_APART, "Rules - what to keep apart"),
+    ("accepted", "8C8C8C", "A3", 200, ACCEPTED, "Any time - problems you have decided to live with"),
 ]

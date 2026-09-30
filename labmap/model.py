@@ -13,10 +13,11 @@ from pathlib import Path
 
 from . import svg
 
-SHEETS = ("rooms", "placeables", "equipment", "services", "circuits", "links", "items", "documents", "keep_apart")
+SHEETS = ("rooms", "placeables", "equipment", "services", "circuits", "links", "items", "documents", "keep_apart",
+          "accepted")
 ID_SHEETS = ("rooms", "placeables", "equipment", "services", "circuits", "items", "documents")
 DATES = {("placeables", "checked"), ("placeables", "decommissioned"), ("items", "checked"),
-         ("documents", "filled"), ("documents", "expires")}
+         ("documents", "filled"), ("documents", "expires"), ("accepted", "until")}
 ID_COLUMNS = {"id", "room", "parent", "outlet", "circuit", "fed_by", "container", "from", "to"}
 NUMERIC = {
     "rooms": {"width", "depth", "ceiling", "cooling"},
@@ -29,12 +30,13 @@ NUMERIC = {
     "items": {"min_qty"},
     "documents": set(),
     "keep_apart": {"distance"},
+    "accepted": set(),
 }
 TEXT = {("rooms", "floor"), ("equipment", "serial"), ("equipment", "asset_tag"), ("items", "qty"), ("items", "rs_part")}
 REQUIRED = {"rooms": ("id",), "placeables": ("id", "room", "mount"), "equipment": ("id",),
             "services": ("id", "type", "room"), "circuits": ("id",), "links": ("from", "to", "type"),
             "items": ("id",), "documents": ("id", "applies_to", "type", "status"),
-            "keep_apart": ("tag", "away_from", "distance")}
+            "keep_apart": ("tag", "away_from", "distance"), "accepted": ("rule", "ids", "reason")}
 REFS = [  # (sheet, column, sheet the value must be on)
     ("placeables", "room", "rooms"), ("placeables", "parent", "placeables"),
     ("equipment", "id", "placeables"), ("equipment", "outlet", "services"),
@@ -95,6 +97,7 @@ class Lab:
     items: dict = field(default_factory=dict)
     documents: dict = field(default_factory=dict)
     keep_apart: list = field(default_factory=list)
+    accepted: list = field(default_factory=list)  # problems someone has decided to live with (see checks._accept)
     decommissioned: dict = field(default_factory=dict)  # id -> date it left (None if only plan = decommissioned)
     gone: set = field(default_factory=set)  # decommissioned, with their drawers and parts
     lists: dict = field(default_factory=dict)
@@ -477,6 +480,10 @@ def _normalise(lab, sheet, r):
             r[k] = [s.strip().upper() for s in str(v).replace(",", ";").split(";") if s.strip()]
         elif (sheet, k) in (("placeables", "tags"),):
             r[k] = [s.strip().lower() for s in str(v).replace(",", ";").split(";") if s.strip()]
+        elif (sheet, k) == ("accepted", "rule"):
+            r[k] = str(v).strip().lower()
+        elif (sheet, k) == ("accepted", "ids"):  # CAB-18-01, DOOR-18: commas, semicolons or spaces between them
+            r[k] = [s.upper() for s in re.split(r"[,;\s]+", str(v)) if s]
         elif sheet == "keep_apart" and k in ("tag", "away_from"):
             r[k] = str(v).strip().lower()
         elif (sheet, k) == ("equipment", "needs"):
@@ -545,6 +552,11 @@ def build(folder, rows, lists=None, room_polys=None, settings=None):
         setattr(lab, sheet, table)
     lab.links = tables["links"]
     lab.keep_apart = tables["keep_apart"]
+    lab.accepted = tables["accepted"]
+    for a in lab.accepted:
+        for i in a.get("ids") or []:
+            if i not in lab.placeables and i not in lab.services and i not in lab.rooms:
+                lab.issue(f"accepted row {a.get('_row', '?')}: {i} isn't a placeable, socket or room", [i])
     for sheet, col, target in REFS:
         pool = getattr(lab, target)
         for r in lab.links if sheet == "links" else getattr(lab, sheet).values():

@@ -26,6 +26,30 @@ measuring error and ventilation, under benches, below the ceiling and through do
 `utility_reach` (3 m), `sprinkler_clearance` (45 cm), `sash_clearance` (15 cm) and `stock_check_days` (180). Change them to match your
 safety office's numbers.
 
+## Problems you've decided to live with
+
+Some problems will just be like that: a cupboard whose doors open towards the lab door, a column in a clear zone.
+Put them on the **`accepted` sheet** and they stop being counted, and stop being outlined in red on the plans and
+in 3D, but the report still lists them under *Accepted*, with your reason, so nobody forgets they're there.
+
+| Column | |
+|---|---|
+| `rule` | the check, as the report names it beside each problem: `clear-zone`, `overlap`, `headroom`... |
+| `ids` | the things involved, separated by commas. Both (`CAB-18-01, DOOR-18`) accepts that pair only; one (`CAB-18-01`) accepts that rule wherever that thing is involved |
+| `reason` | why it's all right — required, for whoever reads the report next |
+| `by`, `until` | who decided, and optionally until when: after that date it counts again, as a reminder to look at it afresh |
+
+You don't need to work these out: every problem and warning in the report has a *To live with it* column with its
+`rule` and `ids` ready to copy, and `check` prints the rule name in brackets beside each group.
+
+Two things keep the sheet honest. A row that no longer matches anything — something moved, or the problem was
+fixed — is a warning, *Accepted, but it doesn't happen any more*, until you delete it. And data problems (mistakes
+in the spreadsheet) can't be accepted: they're to be put right.
+
+**A workbook made before this sheet existed** doesn't have it. Open the blank `lab-data.xlsx` in this folder next
+to yours, right-click its `accepted` tab › *Move or Copy…*, pick your workbook under *To book*, tick *Create a
+copy*, and save. It has no dropdowns, so it brings no links back to the blank one with it.
+
 `python -m unittest discover -s tests -t .` confirms the example still produces exactly its fourteen problems and
 nine warnings.
 

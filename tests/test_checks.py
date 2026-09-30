@@ -381,6 +381,85 @@ class Waiting(unittest.TestCase):
         self.assertEqual(self.waiting(), {"HOOD", "FURN"})
 
 
+class Accepted(unittest.TestCase):
+    """Problems someone has decided to live with: out of the count, still in the report, never lost track of."""
+
+    def run_with(self, *accepted, extra=()):
+        fridge = dict(x=5, y=100, w=60, d=60, h=180, category="fridge")
+        rows = [P("F", door="right", **fridge), P("X", x=30, y=200, w=20, d=20, h=50, category="instrument"), *extra]
+        return checks.run(lab_from(rows, accepted=list(accepted)), today=dt.date(2026, 9, 30))
+
+    def rules(self, res):
+        return {(f.rule, f.ids) for f in res.findings}
+
+    def test_without_it_the_swing_is_blocked(self):
+        self.assertIn(("clear-zone", ("F", "X")), self.rules(self.run_with()))
+
+    def test_accepting_the_pair(self):
+        res = self.run_with(dict(rule="clear-zone", ids="F, X", reason="the door only half-opens anyway"))
+        self.assertNotIn(("clear-zone", ("F", "X")), self.rules(res))
+        self.assertEqual([(f.rule, a["reason"]) for f, a in res.accepted],
+                         [("clear-zone", "the door only half-opens anyway")])
+
+    def test_one_thing_accepts_that_rule_wherever_it_is_involved(self):
+        other = P("Y", x=10, y=165, w=10, d=10, h=40, category="instrument")  # also in the fridge's swing
+        res = self.run_with(dict(rule="clear-zone", ids="F", reason="the fridge hardly opens"), extra=[other])
+        self.assertEqual({f.ids for f, _ in res.accepted}, {("F", "X"), ("F", "Y")})
+        self.assertFalse([f for f in res.findings if f.rule == "clear-zone"])
+
+    def test_it_is_only_for_its_own_rule(self):
+        res = self.run_with(dict(rule="overlap", ids="F, X", reason="wrong rule"))
+        self.assertIn(("clear-zone", ("F", "X")), self.rules(res))
+
+    def test_a_row_that_covers_nothing_is_a_warning(self):
+        res = self.run_with(dict(rule="clear-zone", ids="X, F, Z", reason="three things"))
+        self.assertIn(("clear-zone", ("F", "X")), self.rules(res))  # Z isn't in the finding, so it isn't covered
+        self.assertTrue([f for f in res.findings if f.rule == "stale-acceptance"])
+
+    def test_it_lapses_on_its_until_date(self):
+        res = self.run_with(dict(rule="clear-zone", ids="F, X", reason="for now", until=dt.date(2026, 6, 1)))
+        self.assertIn(("clear-zone", ("F", "X")), self.rules(res))  # counts again
+        self.assertEqual(len(res.lapsed), 1)
+        self.assertFalse([f for f in res.findings if f.rule == "stale-acceptance"])  # lapsed isn't stale
+        res = self.run_with(dict(rule="clear-zone", ids="F, X", reason="for now", until=dt.date(2026, 12, 1)))
+        self.assertEqual(len(res.accepted), 1)
+
+    def test_a_rule_that_isnt_one_and_a_data_problem_cant_be_accepted(self):
+        for rule in ("clear zone", "data"):
+            res = self.run_with(dict(rule=rule, ids="F, X", reason="?"))
+            self.assertIn(("clear-zone", ("F", "X")), self.rules(res))
+            self.assertTrue([f for f in res.findings if f.rule == "data" and "accepted row" in f.message], rule)
+
+    def test_a_row_with_no_ids_says_so_and_does_nothing(self):
+        res = self.run_with(dict(rule="clear-zone", reason="forgot the ids"))
+        self.assertIn(("clear-zone", ("F", "X")), self.rules(res))
+        self.assertTrue([f for f in res.findings if f.rule == "data" and "no ids" in f.message])
+
+    def test_an_id_that_isnt_there(self):
+        res = self.run_with(dict(rule="clear-zone", ids="F, NOPE", reason="typo"))
+        self.assertTrue([f for f in res.findings if f.rule == "data" and "NOPE" in f.message])
+
+    def test_accepted_things_arent_outlined_on_the_plans(self):
+        from labmap import layout
+
+        res = self.run_with(dict(rule="clear-zone", ids="F, X", reason="fine"))
+        self.assertNotIn("F", layout._flagged(res.lab, res))
+
+    def test_the_report_keeps_them_in_view(self):
+        import tempfile
+
+        from labmap import report
+
+        res = self.run_with(dict(rule="clear-zone", ids="F, X", reason="the door only half-opens anyway", by="JG"))
+        page = report.write(res, Path(tempfile.mkdtemp()) / "r.html").read_text(encoding="utf-8")
+        self.assertIn("1 accepted, not counted", page)
+        self.assertIn("id='accepted'", page)
+        self.assertIn("the door only half-opens anyway", page)
+        page = report.write(self.run_with(), Path(tempfile.mkdtemp()) / "r.html").read_text(encoding="utf-8")
+        self.assertIn("To live with it", page)  # ...and says what to type, beside each problem
+        self.assertIn("<code>clear-zone</code> <code>F, X</code>", page)
+
+
 class AcrossAJoin(unittest.TestCase):
     """A bench or a sill made of parts is one surface: something can stand across the join between two of them."""
 

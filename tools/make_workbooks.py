@@ -213,6 +213,9 @@ README = [
     ("settings sheet: the thresholds the checks use (walkway width, circuit limit, ...). Change them to match your rules.", ""),
     ("keep_apart sheet: which tags (tags column on placeables) must be kept how far apart, e.g. vibrates / "
      "vibration-sensitive. Add your own rows.", ""),
+    ("accepted sheet: problems you have decided to live with (a cupboard by a door that will just be like that). "
+     "The report still shows them, with your reason, but doesn't count them. Copy rule and ids from the report's "
+     "'To live with it' column.", ""),
     ("Photos and SOPs aren't listed here: they're linked by file name (see docs/adding-things.md).", ""),
     ("", ""),
 ]

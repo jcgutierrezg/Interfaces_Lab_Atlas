@@ -75,6 +75,8 @@ RULES = {  # rule: (title, what it means, level). {placeholders} are settings.
     "sash": ("Too close to the sash", "Inside a fume hood, less than {sash_clearance} cm behind the sash.", "warning"),
     "door-fit": ("Won't fit through the door", "Arriving or moving (plan new or relocate), but bigger than every door of "
                                                "its room, even on its side, allowing {fit_margin} cm.", "warning"),
+    "stale-acceptance": ("Accepted, but it doesn't happen any more", "A row on the accepted sheet that matches no "
+                         "problem or warning now: something moved, or it was fixed. Delete the row.", "warning"),
 }
 
 
@@ -96,6 +98,8 @@ class Result:
     members: dict = field(default_factory=dict)     # circuit -> devices
     heat: dict = field(default_factory=dict)        # room -> W
     runs: list = field(default_factory=list)        # (link, run in cm or None, limit in cm or None)
+    accepted: list = field(default_factory=list)    # (finding, the accepted-sheet row it's covered by)
+    lapsed: list = field(default_factory=list)      # accepted-sheet rows whose until has passed
     walk_notes: dict = field(default_factory=dict)  # room -> why walkways weren't checked
     socket_load: dict = field(default_factory=dict)  # socket or strip with a rating_a -> running W through it
 
@@ -125,7 +129,44 @@ def run(lab, today=None):
     blocked = {f.ids[0] for f in res.findings if f.rule == "clear-zone"}
     for rid in lab.rooms:
         _walkways(res, rid, blocked)
+    _accept(res, today or dt.date.today())  # last, so everything above still sees the room as it really is
     return res
+
+
+def _accept(res, today):
+    """Take what someone has decided to live with out of the count, into res.accepted, where the report still
+    shows it with the reason. A row on the accepted sheet covers the findings of its rule whose ids include all
+    of the row's: name both things to accept that pair only, one to accept that rule wherever it's involved.
+    A row past its until date covers nothing, so the problem counts again; and a row that covers nothing is a
+    warning of its own, so the sheet doesn't fill with rows for problems long gone. Data problems can't be
+    accepted: they're mistakes in the spreadsheet, to be put right."""
+    live = []
+    for a in res.lab.accepted:
+        where, rule = f"accepted row {a.get('_row', '?')}", a.get("rule")
+        if not rule or not a.get("ids"):
+            continue  # already a data problem: the row says what's missing
+        if rule not in RULES or rule == "data":
+            res.add("data", f"{where}: {rule!r} isn't a rule that can be accepted: use the name the report shows "
+                            f"beside the problem, such as clear-zone or overlap", a.get("ids") or ())
+        elif isinstance(a.get("until"), dt.date) and a["until"] < today:
+            res.lapsed.append(a)
+        else:
+            live.append(a)
+    if not live:
+        return
+    kept, used = [], set()
+    for f in res.findings:
+        cover = next((a for a in live if f.rule == a["rule"] and set(a["ids"]) <= set(f.ids)), None)
+        if cover is None or f.rule == "data":
+            kept.append(f)
+        else:
+            res.accepted.append((f, cover))
+            used.add(id(cover))
+    res.findings = kept
+    for a in live:
+        if id(a) not in used:
+            res.add("stale-acceptance", f"accepted row {a.get('_row', '?')} ({a['rule']}: {', '.join(a['ids'])}) "
+                                        f"matches nothing now: delete it", a["ids"])
 
 
 def _probes(poly):
