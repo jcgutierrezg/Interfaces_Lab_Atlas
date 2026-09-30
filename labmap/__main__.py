@@ -224,7 +224,8 @@ def _model(args):
         print(f"{path.stem}: {parts} part(s)  {path.resolve()}")
         if skipped:
             print(f"  not drawn, nothing to draw them from yet (no size or no place): {', '.join(skipped[:8])}" + (" ..." if len(skipped) > 8 else ""))
-    print("Double-click a .glb to open it in 3D Viewer on Windows; drag to orbit, right-drag or two fingers to pan.")
+    print("Open a .glb in Open3D Viewer or Blender, or look at the room in 3D in the directory (python -m labmap "
+              "site): no app needed there.")
     print(f"Walls stop at {args.walls} cm so you can see in: --walls 250 for full height, --walls 0 for none.")
     if args.open:
         os.startfile(built[0][0].parent) if hasattr(os, "startfile") else None

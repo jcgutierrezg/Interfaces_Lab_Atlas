@@ -1,8 +1,8 @@
 """A 3D model of a room from the same data as the drawings: build/model/<ROOM>.glb.
 
 Every placed object already has a footprint polygon and a height band, so the model is those footprints extruded
-and nothing more: a massing model to orbit in Windows 3D Viewer (double-click the file), Blender, VS Code or any
-glTF viewer. Rotations, profiles, groups and mount heights all come through, because they are already in the
+and nothing more: a massing model to orbit in Open3D Viewer, Blender, VS Code or any glTF viewer, or in the
+directory's 3D page (view3d.py), which needs no app at all. Rotations, profiles, groups and mount heights all come through, because they are already in the
 geometry the checks and the drawings use.
 
 glTF is JSON and one binary buffer, so it is written here rather than pulling in a library, the way svg.py and

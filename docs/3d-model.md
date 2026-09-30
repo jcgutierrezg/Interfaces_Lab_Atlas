@@ -9,9 +9,16 @@ python -m labmap model --plain    # just the room, without the checks: the one t
 python -m labmap model --room 30.18_ML --walls 250
 ```
 
-Double-click a `.glb` and Windows opens it in **3D Viewer**: drag to orbit, right-drag or two fingers to pan, wheel
-to zoom. It also opens in Blender, PowerPoint, VS Code and any glTF viewer, and it's a single file you can email to
-the safety office or to whoever is quoting for the move.
+Open a `.glb` in **Open3D Viewer** or **Blender** (Microsoft's 3D Viewer has been discontinued), or any other glTF
+viewer, including PowerPoint and VS Code. It's a single file you can email to the safety office or to whoever is
+quoting for the move.
+
+**No app needed: the directory shows every room in 3D too.** `python -m labmap site` gives each room a
+*see the room in 3D* page, and every object page a *see it in 3D* link that flies to it. Drag to turn, right-drag
+or Shift-drag (or two fingers) to move, scroll or pinch to zoom, and click anything to see what it is, what the
+checks say about it, and a link to its page. Walls and clear zones can be switched off. It runs in any current
+browser, straight off a shared drive with no internet, and the `.glb` is next to it for anyone who'd rather
+download it.
 
 Nothing extra needs measuring. Every placed object already has a footprint and a height band, so the model is
 those footprints extruded: rotations, `@profile` shapes, groups, `mount` and `z` all come through, and each object

@@ -40,6 +40,12 @@ server and no internet. It has:
   and ask rather than assume something has run out.
 - **A page per socket, strip or tap** (which circuit, what's plugged in), per room (a clickable plan) and per SOP
   (with `[[ID]]` links working).
+- **Every room in 3D**: *see the room in 3D* on the room's page, and *see it in 3D* on every object's page, which
+  flies to it. Drag to turn, right-drag or Shift-drag (or two fingers) to move, scroll or pinch to zoom; click
+  anything to see what it is and what the checks say about it. Problems are red, warnings amber, clear zones are
+  painted yellow, and benches float over their leg room so you can see what's parked under them. It draws with the
+  browser's own WebGL, so it works off a shared drive with no internet and nothing to install; the room's `.glb` is
+  beside it, for Open3D Viewer or Blender. See [The 3D model](3d-model.md).
 - A copy of the check report.
 
 Photos are shrunk copies (your originals in `photos/` are never changed). Rebuild the site whenever the

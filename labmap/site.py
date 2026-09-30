@@ -14,7 +14,7 @@ import unicodedata
 from collections import defaultdict
 from pathlib import Path
 
-from . import checks, layout, md, model, report
+from . import checks, layout, md, model, report, view3d
 from . import geometry as G
 from .model import order_links
 
@@ -497,7 +497,10 @@ class Site:
         if svg_:
             where = "" if anchor == i else f" <span class='note'>(shown: {self.a(anchor, root)})</span>" if anchor else \
                 (" <span class='note'>(decommissioned)</span>" if i in self.lab.gone else " <span class='note'>(not placed yet)</span>")
-            body.append(f"<h2 id='where'>Where</h2><p class='where'>{self.crumbs(i, root)}{where}</p>{svg_}")
+            in3d = (f" · <a href='{root}rooms/{fname(r['room'])}-3d.html#{esc(anchor)}'>see it in 3D</a>"
+                    if anchor and (self.lab.rooms.get(r.get("room")) or {}).get("poly") and self.res.geo.get(anchor)
+                    else "")
+            body.append(f"<h2 id='where'>Where</h2><p class='where'>{self.crumbs(i, root)}{where}{in3d}</p>{svg_}")
         self.page(f"o/{fname(i)}.html", f"{i} {r.get('name') or ''}", "".join(body), root, style)
 
     def service_page(self, i):
@@ -529,13 +532,27 @@ class Site:
                       f"{' · ' + str(len(self.lab.children.get(i, []))) + ' inside/on it' if self.lab.children.get(i) else ''}</span></li>"
                       for i in sorted(top))
         socks = [i for i, s in self.S.items() if s.get("room") == rid]
+        in3d = f" · <a href='{fname(rid)}-3d.html'>see the room in 3D →</a>" if room.get("poly") else ""
         body = (f"<h1>{esc(rid)} <span class='sub'>{esc(room.get('name'))}</span></h1>"
-                f"<p class='note'>Click anything on the plan to open it.</p>{svg_}<h2>In this room</h2><ul>{lis}</ul>")
+                f"<p class='note'>Click anything on the plan to open it{in3d}</p>{svg_}<h2>In this room</h2><ul>{lis}</ul>")
         if socks:
             body += "<h2>Sockets, strips and taps</h2><ul>" + "".join(
                 f"<li>{self.a(i, root)} <span class='note'>{esc(self.S[i].get('type'))}</span></li>" for i in sorted(socks)) + "</ul>"
         body += self.docs(rid, root)
         self.page(f"rooms/{fname(rid)}.html", f"{rid} {room.get('name') or ''}", body, root)
+
+    def room_3d_page(self, rid):
+        """The room in 3D in the browser, with the .glb beside it for anyone who'd rather use a 3D app."""
+        from . import glb
+
+        root, room = "../", self.lab.rooms[rid]
+        nodes, _ = glb.scene(self.lab, rid, self.res.geo, glb.WALL_H, layout._flagged(self.lab, self.res),
+                             person=self.lab.settings["person_height"])
+        glb.write(nodes, self.out / "rooms" / f"{fname(rid)}.glb")
+        body = view3d.page_body(self.lab, self.res, rid, lambda i: self.href(i, root), f"{fname(rid)}.html",
+                                f"{fname(rid)}.glb")
+        self.page(f"rooms/{fname(rid)}-3d.html", f"{rid} {room.get('name') or ''} in 3D", body, root,
+                  scripts=("view3d.js",))
 
     def sop_page(self, sop):
         root, meta = "../", sop["meta"]
@@ -609,8 +626,9 @@ class Site:
         self.out.mkdir(parents=True, exist_ok=True)
         self.load_photos()
         self.load_sops()
-        (self.out / "style.css").write_text(CSS + layout.MAP_CSS, encoding="utf-8")
+        (self.out / "style.css").write_text(CSS + layout.MAP_CSS + view3d.CSS, encoding="utf-8")
         (self.out / "map.js").write_text(layout.MAP_JS, encoding="utf-8")
+        (self.out / "view3d.js").write_text(view3d.JS, encoding="utf-8")
         data = json.dumps(self.search_index(), ensure_ascii=False, separators=(",", ":"))
         (self.out / "search.js").write_text(f"window.LABMAP={data};\n{SEARCH_JS}", encoding="utf-8")
         for i in self.P:
@@ -619,6 +637,8 @@ class Site:
             self.service_page(i)
         for rid in self.lab.rooms:
             self.room_page(rid)
+            if self.lab.rooms[rid].get("poly"):
+                self.room_3d_page(rid)
         for sop in self.sops:
             self.sop_page(sop)
         self.index_page()
