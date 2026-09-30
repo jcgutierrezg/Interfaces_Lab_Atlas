@@ -1092,9 +1092,10 @@ def moves_from(lab, mats, rooms, layers=None):
     return moves, notes
 
 
-def layout_moves(lab):
-    """What the layout file says has changed: (moves, notes) as moves_from() gives them."""
-    path = layout_path(lab.folder)
+def layout_moves(lab, path=None):
+    """What a drawing says has changed: (moves, notes) as moves_from() gives them. The working drawing,
+    labs.svg, unless path names another: an option saved beside it (see drawings)."""
+    path = Path(path) if path else layout_path(lab.folder)
     if not path.exists():
         return no_moves(), []
     mats, rooms, layers = read_layout(path)
@@ -1121,8 +1122,20 @@ def describe_move(lab, sheet, i, change):
             + ("  (now standing on the floor)" if change.get("mount") == "floor" and r.get("mount") != "floor" else ""))
 
 
-def layout_path(folder):
-    return Path(folder) / "build" / "layout" / LAYOUT_FILE
+def layout_path(folder, name=None):
+    """build/layout/labs.svg, the working drawing; or, with a name, an option saved beside it (option-A.svg)."""
+    stem = Path(name).stem if name else Path(LAYOUT_FILE).stem
+    return Path(folder) / "build" / "layout" / f"{stem}.svg"
+
+
+def drawings(folder):
+    """{name: path} of every arrangement drawn in build/layout: the working drawing first, then the options saved
+    beside it with Inkscape's Save As. Each is a whole arrangement, and can be checked, modelled, compared with
+    the others or pulled on its own."""
+    here = Path(folder) / "build" / "layout"
+    found = {p.stem: p for p in sorted(here.glob("*.svg"))} if here.exists() else {}
+    working = Path(LAYOUT_FILE).stem
+    return {**({working: found.pop(working)} if working in found else {}), **found}
 
 
 VIEW = ("zoom", "cx", "cy", "current-layer", "window-width", "window-height", "window-x", "window-y",

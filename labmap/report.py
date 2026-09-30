@@ -128,6 +128,79 @@ def comparison(before, after):
     return table(["", "Now (lab-data.xlsx)", "As drawn", ""], rows)
 
 
+def effort(before, after, moves):
+    """How much work an arrangement is on the day: (things lifted, rounds, things parked for a while)."""
+    from .sequence import plan
+
+    steps = plan(before, after, moves)
+    return (sum(1 for s in steps if s.kind == "move"), max((s.round for s in steps), default=0),
+            sum(1 for s in steps if s.kind == "park"))
+
+
+def options_table(before, options):
+    """The arrangement now against several drawn ones, a column each: options is [(name, checks, moves)].
+    A row is shown when the options don't all agree with now; the best option on it is marked."""
+    base = summary(before)
+    sums = [summary(res) for _, res, _ in options]
+    work = [effort(before, res, moves) for _, res, moves in options]
+    s, rows = before.lab.settings, []
+
+    def row(what, now, values, lower_is_better=True, always=False, show=None):
+        if not always and all(v == now for v in values):
+            return
+        best = (min if lower_is_better else max)(values) if values else None
+        cells = []
+        for v in values:
+            text = show(v) if show else v
+            good = len(set(values)) > 1 and v == best
+            cells.append(("html", f"<span class='ok'>{esc(text)}</span>") if good else text)
+        rows.append((what, show(now) if show else now, *cells))
+
+    row("Problems", base["problems"], [x["problems"] for x in sums], always=True)
+    row("Warnings", base["warnings"], [x["warnings"] for x in sums], always=True)
+    for rule in RULES:
+        if rule != "data":
+            row(f"· {describe(rule, s)[0]}", base["rules"].get(rule, 0), [x["rules"].get(rule, 0) for x in sums])
+    for rid in sorted(set(base["free"]).union(*(x["free"] for x in sums))):
+        row(f"Free bench space in {rid}, m²", round(base["free"].get(rid, 0), 2),
+            [round(x["free"].get(rid, 0), 2) for x in sums], lower_is_better=False)
+    for tag in sorted(set(base["flows"]).union(*(x["flows"] for x in sums))):
+        now, each = base["flows"].get(tag), [x["flows"].get(tag) for x in sums]
+
+        def cost(w):  # a workflow split across rooms is worse than any spread within one
+            return (1, 0) if w and w["split"] else (0, w["spread"] or 0) if w else (0, 0)
+        if any(_spread(w) != _spread(now) for w in each):
+            costs = [cost(w) for w in each]
+            best = min(costs)
+            rows.append((f"Workflow '{tag}': how spread out", _spread(now),
+                         *[("html", f"<span class='ok'>{esc(_spread(w))}</span>") if len(set(costs)) > 1 and c == best
+                           else _spread(w) for w, c in zip(each, costs)]))
+    row("Things to lift on the day", 0, [w[0] for w in work], always=True)
+    row("Rounds on the day", 0, [w[1] for w in work], always=True)
+    row("Parked out of the way for a while", 0, [w[2] for w in work])
+    return table(["", "Now (lab-data.xlsx)", *[name for name, _, _ in options]], rows)
+
+
+def write_compare(path, before, options, reports):
+    """A page with every arrangement drawn in build/layout side by side, against the one in lab-data.xlsx.
+    reports is {name: that option's full report}, linked from its column."""
+    lab = before.lab
+    links = "".join(f"<li><a href='{esc(Path(reports[name]).name)}'>{esc(name)}</a>: the full report and its move "
+                    f"list</li>" for name, _, _ in options if name in reports)
+    text = (f"<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' "
+            f"content='width=device-width, initial-scale=1'><title>Arrangements compared</title><style>{CSS}</style>"
+            f"</head><body><main><h1>Arrangements compared</h1><div class='sub'>{dt.datetime.now():%Y-%m-%d %H:%M} · "
+            f"every drawing in <code>build/layout</code> against <code>{esc(lab.folder.resolve())}</code> as it is now"
+            f"</div><p class='note'>A row appears when the options don't all match the arrangement now; the best "
+            f"option on each is in green. The last rows say how much work each is on moving day. Nothing here is "
+            f"written to lab-data.xlsx: <code>python -m labmap pull --layout NAME</code> keeps one.</p>"
+            f"{options_table(before, options)}<h2>Each one in full</h2><ul>{links}</ul></main></body></html>")
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
 def _where(P, i):
     r = P[i]
     if r.get("mount") == "in":

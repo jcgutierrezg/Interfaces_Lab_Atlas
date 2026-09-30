@@ -49,6 +49,7 @@ it first. They work on **your data folder** (from `labmap.ini`), never on the ex
 | `layout.bat` | Draws `build\layout\labs.svg`, **every room in one file**, and opens that folder. | Before rearranging: open `labs.svg` in Inkscape. |
 | `try-layout.bat` | Checks the arrangement **as drawn**, compares it with the current one and lists the moves, in `build\report-layout.html`, and models it in 3D, in `build\model\<ROOM>-layout.glb`. Writes nothing to `lab-data.xlsx`. | After moving things in Inkscape and saving, to see whether an idea works. As often as you like. |
 | `pull.bat` | Writes the arrangement from the layout into `lab-data.xlsx`, saves a printable move list, redraws the layout, then runs the checks and opens the report. | When you're happy with an arrangement and want to keep it. |
+| `compare.bat` | Puts every arrangement drawn in `build\layout` (`labs.svg`, and options you saved beside it with *Save As*) side by side against the current one, in `build\compare.html`. Writes nothing to `lab-data.xlsx`. | When you have more than one idea and want to choose. See [Weighing up several ideas](rearranging.md#weighing-up-several-ideas). |
 | `site.bat` | Builds the lab directory in `build\site` and opens it in the browser. | After any change people should see: new items, photos, SOPs, forms, moves. |
 | `model.bat` | Writes a 3D model of each room to `build\model` and opens that folder: double-click a `.glb` to look around it. See [The 3D model](3d-model.md). | To see a room in three dimensions, or to send someone a model of it. |
 

@@ -99,3 +99,24 @@ it and put back after.
 - If a position ever does read as blank (an older `pull` rewrote the workbook, or another tool did), `check` says
   which cells, and `pull` refuses to start rather than write the drawing's numbers over those formulas: open
   `lab-data.xlsx` in Excel, save it once, and the stored results are back.
+
+## Weighing up several ideas
+
+`labs.svg` is the working drawing, but an arrangement is just a drawing, so keep as many as you like. Arrange
+one idea, then *File › Save As* `build/layout/option-A.svg`; open `labs.svg` again for the next, and so on. Then
+
+```
+python -m labmap compare                      # every drawing in build/layout, side by side (or compare.bat)
+python -m labmap check --layout option-A      # one of them in full: build/report-option-A.html
+python -m labmap model --layout option-A      # ...in 3D: build/model/<ROOM>-option-A.glb
+python -m labmap pull --layout option-A       # keep it
+```
+
+`compare` writes `build/compare.html`: the arrangement in `lab-data.xlsx` and a column per drawing, on every row
+where they don't all agree — problems and warnings rule by rule, free bench space per room, how spread out each
+workflow group is — and at the bottom how much work each one is on the day: things to lift, rounds, things
+parked. The best on each row is in green, and each column links to that option's full report and move list.
+
+Pulling an option writes it into `lab-data.xlsx` and redraws `labs.svg` to match, keeping a copy of the old one in
+`build/backups/`. The other options are left as they were; since they were drawn against the old arrangement,
+compare them again and each is shown as a change from the new one.

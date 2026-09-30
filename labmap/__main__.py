@@ -1,4 +1,4 @@
-"""Command line: python -m labmap <check | layout | pull | site | xy | lists | model> [folder]
+"""Command line: python -m labmap <check | layout | pull | compare | site | xy | lists | model> [folder]
 
 The folder is the one holding lab-data.xlsx (with rooms/, shapes/, sops/, photos/ beside it). Without one, the
 folder named in labmap.ini (next to this package) is used, e.g. a synced Teams or OneDrive folder; failing that,
@@ -10,6 +10,7 @@ import argparse
 import configparser
 import datetime as dt
 import os
+import shutil
 import sys
 import webbrowser
 from pathlib import Path
@@ -74,6 +75,26 @@ def _print_moves(lab, moves, notes):
             print(f"  {i}: {layout.describe_move(lab, sheet, i, change)}")
 
 
+WORKING = "labs"  # build/layout/labs.svg; any other drawing there is an option saved beside it
+
+
+def _drawing(folder, name):
+    """(name, path) of the drawing to read: the working one, or an option saved beside it. None, having said
+    which drawings there are, if there's no such file."""
+    from . import layout
+
+    path = layout.layout_path(folder, None if name in (None, WORKING) else name)
+    if not path.exists():
+        known = ", ".join(layout.drawings(folder)) or "none yet: run layout"
+        print(f"There's no {path.name} in {path.parent}. Drawings there: {known}")
+        return None
+    return path.stem, path
+
+
+def _report_path(folder, name):
+    return folder / "build" / ("report-layout.html" if name == WORKING else f"report-{name}.html")
+
+
 def _check(args):
     folder = data_folder(args.folder)
     lab = _load(folder)
@@ -83,16 +104,21 @@ def _check(args):
     if args.layout:
         from . import layout
 
-        moves, notes = layout.layout_moves(lab)
+        got = _drawing(folder, args.layout)
+        if got is None:
+            return 2
+        name, path = got
+        moves, notes = layout.layout_moves(lab, path)
         n = layout.count(moves)
-        print(f"Checking the layout as drawn ({n} change(s) not pulled yet; nothing is written):")
+        print(f"Checking {path.name} as drawn ({n} change(s) not pulled yet; nothing is written):")
         _print_moves(lab, moves, notes)
         before = checks.run(lab)
         lab = _load(folder, moves)
         if lab is None:
             return 2
-        banner = f"Trying the arrangement in the Inkscape layout: {n} change(s) not in lab-data.xlsx yet. Run pull to keep them."
-        target = folder / "build" / "report-layout.html"
+        banner = (f"Trying the arrangement drawn in {path.name}: {n} change(s) not in lab-data.xlsx yet. "
+                  f"Run pull{'' if name == WORKING else ' --layout ' + name} to keep them.")
+        target = _report_path(folder, name)
     res = checks.run(lab)
     out = report.write(res, target, banner, before=before, moves=moves)
     _summary(res, args.show)
@@ -130,6 +156,8 @@ def _layout(args):
     print("Open it in Inkscape, drag things around (between rooms too) and save. Then:")
     print("  python -m labmap check --layout   to check the arrangement as drawn (nothing is written)")
     print("  python -m labmap pull             to keep it: writes it into lab-data.xlsx")
+    print("To weigh up several ideas, Save As each one beside it (option-A.svg, option-B.svg), then:")
+    print("  python -m labmap compare          to see them side by side")
     return 0
 
 
@@ -150,11 +178,15 @@ def _pull(args):
             print(f"  ... and {len(stale) - 8} more")
         print("Open lab-data.xlsx in Excel, save it (that stores the results), then run pull again.")
         return 2
-    moves, notes = layout.layout_moves(lab)
+    got = _drawing(folder, args.layout)
+    if got is None:
+        return 2
+    name, path = got
+    moves, notes = layout.layout_moves(lab, path)
     _print_moves(lab, moves, notes)
     n = layout.count(moves)
     if not n:
-        print("No moves to pull: lab-data.xlsx already matches the layout.")
+        print(f"No moves to pull: lab-data.xlsx already matches {path.name}.")
         return 0
     if args.dry_run:
         print(f"{n} change(s); nothing written (--dry-run).")
@@ -179,8 +211,16 @@ def _pull(args):
     sheet = report.write_move_list(folder / "build" / "move-lists" / f"move-list-{stamp:%Y%m%d-%H%M}.html",
                                    before, after, moves, f"Pulled {stamp:%Y-%m-%d %H:%M} from {folder.resolve().name}")
     print(f"Move list to print: {sheet.resolve()}")
+    working = layout.layout_path(folder)
+    if name != WORKING and working.exists():  # it was drawn against the old arrangement: keep it, then redraw
+        kept = folder / "build" / "backups" / f"{working.stem}-{stamp:%Y%m%d-%H%M%S}.svg"
+        kept.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(working, kept)
+        print(f"{working.name} was drawn before this; a copy is in {kept.resolve()}")
     layout.write_layouts(moved, after, force=True)
-    print("Layout redrawn to match. If it's open in Inkscape, use File › Revert to see the new version.")
+    print(f"{working.name} redrawn to match. If it's open in Inkscape, use File › Revert to see the new version."
+          + ("" if name == WORKING else f" {path.name} and any other options are left as they were: compare them "
+                                        f"again to see each one from here."))
     if note["formulas"] and not note["rewrote"]:
         print(f"The workbook's {note['formulas']} formula(s) kept their stored results, and Excel will work them "
               f"out again next time you open it: any that read a cell this pull changed still show the old value.")
@@ -204,15 +244,19 @@ def _model(args):
     if args.layout:
         from . import layout
 
-        moves, notes = layout.layout_moves(lab)
+        got = _drawing(folder, args.layout)
+        if got is None:
+            return 2
+        name, path = got
+        moves, notes = layout.layout_moves(lab, path)
         n = layout.count(moves)
-        print(f"Modelling the layout as drawn: {n} change(s) not pulled yet, in purple, with a ghost where each "
+        print(f"Modelling {path.name} as drawn: {n} change(s) not pulled yet, in purple, with a ghost where each "
               f"thing stands now. Nothing is written to lab-data.xlsx.")
         _print_moves(lab, moves, notes)
         before, lab = lab, _load(folder, moves)
         if lab is None:
             return 2
-        suffix = "-layout"
+        suffix = "-layout" if name == WORKING else f"-{name}"
     built = glb.write_models(lab, checks.run(lab), folder, rooms, args.walls, args.plain, before, suffix)
     if not built:
         print("No rooms to model: the rooms sheet is empty, or none of them has an outline yet.")
@@ -229,6 +273,45 @@ def _model(args):
     print(f"Walls stop at {args.walls} cm so you can see in: --walls 250 for full height, --walls 0 for none.")
     if args.open:
         os.startfile(built[0][0].parent) if hasattr(os, "startfile") else None
+    return 0
+
+
+def _compare(args):
+    """Every arrangement drawn in build/layout, side by side, against the one in lab-data.xlsx."""
+    from . import layout
+
+    folder = data_folder(args.folder)
+    lab = _load(folder)
+    if lab is None:
+        return 2
+    found = layout.drawings(folder)
+    if not found:
+        print("No drawings in build/layout yet. Run layout, arrange labs.svg in Inkscape, and Save As each idea "
+              "beside it (option-A.svg, option-B.svg): then compare them.")
+        return 2
+    before = checks.run(lab)
+    options, reports = [], {}
+    for name, path in found.items():
+        moves, _ = layout.layout_moves(lab, path)
+        drawn = _load(folder, moves)
+        if drawn is None:
+            return 2
+        res = checks.run(drawn)
+        banner = (f"The arrangement drawn in {path.name}: {layout.count(moves)} change(s) from lab-data.xlsx. "
+                  f"Run pull{'' if name == WORKING else ' --layout ' + name} to keep it.")
+        reports[name] = report.write(res, _report_path(folder, name), banner, before=before, moves=moves)
+        options.append((name, res, moves))
+    page = report.write_compare(folder / "build" / "compare.html", before, options, reports)
+    width = max(len(n) for n in ["now", *found]) + 2
+    b = report.summary(before)
+    print(f"{'':<{width}}{'problems':>9}{'warnings':>9}{'to lift':>9}{'rounds':>8}")
+    print(f"{'now':<{width}}{b['problems']:>9}{b['warnings']:>9}{0:>9}{0:>8}")
+    for name, res, moves in options:
+        s, (lift, rounds, _) = report.summary(res), report.effort(before, res, moves)
+        print(f"{name:<{width}}{s['problems']:>9}{s['warnings']:>9}{lift:>9}{rounds:>8}")
+    print(f"Side by side: {page.resolve()}")
+    if args.open:
+        webbrowser.open(page.resolve().as_uri())
     return 0
 
 
@@ -367,9 +450,10 @@ def main(argv=None):
     c.add_argument("folder", nargs="?", help=folder_help)
     c.add_argument("--open", action="store_true", help="open the report in the browser")
     c.add_argument("--show", type=int, default=5, help="problems to print per rule (default 5)")
-    c.add_argument("--layout", action="store_true",
+    c.add_argument("--layout", nargs="?", const=WORKING, metavar="NAME",
                    help="check the arrangement as drawn in the Inkscape layout, without pulling it; compares it with "
-                        "the current one and lists the moves (writes build/report-layout.html)")
+                        "the current one and lists the moves (writes build/report-layout.html). With a NAME, the "
+                        "option saved beside it as build/layout/NAME.svg (writes build/report-NAME.html)")
     c.set_defaults(run=_check)
     lay = sub.add_parser("layout", help="write build/layout/labs.svg, every room in one file, to rearrange in Inkscape")
     lay.add_argument("folder", nargs="?", help=folder_help)
@@ -379,15 +463,23 @@ def main(argv=None):
     pl = sub.add_parser("pull", help="write the arrangement in the layout back into lab-data.xlsx")
     pl.add_argument("folder", nargs="?", help=folder_help)
     pl.add_argument("--dry-run", action="store_true", help="show the changes without writing them")
+    pl.add_argument("--layout", default=WORKING, metavar="NAME",
+                    help="pull the option saved as build/layout/NAME.svg instead of labs.svg; labs.svg is kept in "
+                         "build/backups and redrawn to match")
     pl.set_defaults(run=_pull)
+    cp = sub.add_parser("compare", help="every arrangement drawn in build/layout side by side: build/compare.html")
+    cp.add_argument("folder", nargs="?", help=folder_help)
+    cp.add_argument("--open", action="store_true", help="open it in the browser")
+    cp.set_defaults(run=_compare)
     md = sub.add_parser("model", help="write build/model/<ROOM>.glb, a 3D model of each room to look around in")
     md.add_argument("folder", nargs="?", help=folder_help)
     md.add_argument("--room", help="one room, or several separated by commas (default: all of them)")
     md.add_argument("--walls", type=int, default=120,
                     help="wall height in cm, so you can see in from outside (default 120; 0 for no walls)")
-    md.add_argument("--layout", action="store_true",
+    md.add_argument("--layout", nargs="?", const=WORKING, metavar="NAME",
                     help="model the arrangement drawn in the Inkscape layout, before pulling it: what moved is "
-                         "coloured, with a ghost where it stands now (writes <ROOM>-layout.glb, nothing else)")
+                         "coloured, with a ghost where it stands now (writes <ROOM>-layout.glb, nothing else). With "
+                         "a NAME, the option saved as build/layout/NAME.svg (writes <ROOM>-NAME.glb)")
     md.add_argument("--plain", action="store_true",
                     help="no problems, warnings or clear zones: just the room, to send to someone")
     md.add_argument("--open", action="store_true", help="open the folder it's in")

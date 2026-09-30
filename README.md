@@ -58,7 +58,7 @@ templates and a fictional example. **Everything generated** goes to the data fol
 | `sops/_TEMPLATE.md` | Copy once per procedure. |
 | `photos/` | Photos, linked to objects by file name. See `photos/README.md`. |
 | `example/` | A complete, fictional two-room lab filled in the same way (a worked row for every recipe in [How to add new things](docs/adding-things.md)): every case in the docs, plus a known list of problems for testing the checks. Has its own `.bat` files to play with, and `reset.bat` to start over. See [its README](example/README.md). |
-| `check.bat`, `layout.bat`, `try-layout.bat`, `pull.bat`, `site.bat`, `model.bat` | Double-click shortcuts for the commands: see [Double-click shortcuts](docs/setup.md#double-click-shortcuts-bat-files). |
+| `check.bat`, `layout.bat`, `try-layout.bat`, `pull.bat`, `compare.bat`, `site.bat`, `model.bat` | Double-click shortcuts for the commands: see [Double-click shortcuts](docs/setup.md#double-click-shortcuts-bat-files). |
 | `labmap/`, `tests/` | The code that checks, draws and builds the directory, and its tests. |
 | `tools/` | Regenerates the empty template and the example workbook: `python tools/make_workbooks.py`. |
 | `build/` (in the data folder) | Everything generated: the report, the layout drawing, the directory, move lists, backups of the workbook. |
