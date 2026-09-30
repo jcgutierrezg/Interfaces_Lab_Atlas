@@ -88,6 +88,33 @@ class Pages(unittest.TestCase):
         for o in self.d["objects"][1:]:
             self.assertTrue((self.page.parent / o["href"]).resolve().exists(), o)
 
+    def search(self):
+        text = (self.tmp / "search.js").read_text(encoding="utf-8")
+        return json.loads(re.search(r"window\.LABMAP=(\[.*?\]);", text).group(1))
+
+    def test_search_results_go_straight_to_3d(self):
+        by = {(e["t"], e["id"]): e for e in self.search()}
+        self.assertEqual(by[("object", "SPEC-02")]["d"], "rooms/LAB-A-3d.html#SPEC-02")
+        item = by[("item", "I-0001")]  # the allen keys, in a drawer: the drawer isn't drawn, what holds it is
+        anchor = item["d"].split("#")[1]
+        self.assertEqual(anchor, site.Site(self.lab, checks.run(self.lab), self.tmp).placed_ancestor(
+            self.lab.items["I-0001"]["container"]))
+        self.assertFalse([e for e in self.search() if e["t"] in ("document", "procedure") and "d" in e])
+
+    def test_every_3d_link_lands_on_something_the_page_can_select(self):
+        pages = {}
+        for e in self.search():
+            if "d" not in e:
+                continue
+            page, anchor = e["d"].split("#")
+            if page not in pages:
+                pages[page] = {o["id"] for o in embedded(self.tmp / page)["objects"][1:]}
+            self.assertIn(anchor, pages[page], e)
+
+    def test_a_decommissioned_thing_has_no_3d_link(self):
+        gone = [e for e in self.search() if e["t"] == "object" and e["id"] in self.lab.gone]
+        self.assertTrue(all("d" not in e for e in gone))
+
     def test_the_plan_and_object_pages_link_in(self):
         self.assertIn("LAB-A-3d.html", (self.tmp / "rooms" / "LAB-A.html").read_text(encoding="utf-8"))
         self.assertIn("rooms/LAB-A-3d.html#SPEC-02", (self.tmp / "o" / "SPEC-02.html").read_text(encoding="utf-8"))

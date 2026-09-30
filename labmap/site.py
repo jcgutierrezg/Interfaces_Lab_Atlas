@@ -76,6 +76,9 @@ img.thumb { height: 48px; vertical-align: middle; margin-right: 8px; }
 #results li { padding: 9px 2px; border-bottom: 1px solid var(--line); }
 #results li a { font-weight: 600; }
 .badge { font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--soft); border: 1px solid var(--line); color: var(--muted); }
+a.in3d { font-size: 12px; font-weight: 600; padding: 1px 9px; border-radius: 999px; background: #e11d48; color: #fff;
+         text-decoration: none; margin-left: 4px; }
+a.in3d:hover { background: #be123c; }
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
 .card { border: 1px solid var(--line); border-radius: 8px; padding: 12px; text-decoration: none; color: inherit; }
 .card:hover { border-color: var(--accent); }
@@ -120,7 +123,9 @@ SEARCH_JS = """(function () {
     out.innerHTML = hits.length ? hits.slice(0, 80).map(function (h) {
       var e = h[1];
       return '<li><a href="' + e.u + '">' + esc(e.name) + '</a> <span class="badge">' + e.t + '</span> ' +
-        (e.id ? '<code>' + esc(e.id) + '</code>' : '') + '<div class="where">' + esc(e.w) + '</div></li>';
+        (e.id ? '<code>' + esc(e.id) + '</code>' : '') +
+        (e.d ? ' <a class="in3d" href="' + esc(e.d) + '" title="Show it in the room, in 3D">3D</a>' : '') +
+        '<div class="where">' + esc(e.w) + '</div></li>';
     }).join('') : '<li>Nothing found. Once you find it, add the word you tried as a synonym.</li>';
   }
   var q = new URLSearchParams(location.search).get('q') || '';
@@ -283,6 +288,19 @@ class Site:
                 return j
             j = self.P[j].get("parent")
         return None
+
+    def link3d(self, i, root):
+        """The 3D view of i's room, flown to i, or to the nearest thing holding it that is drawn (a drawer's
+        pedestal, an item's shelf). None where there is nothing to show: not placed, decommissioned, drawn only as
+        an outline on the plan (reserved working space), or in a room with no outline."""
+        anchor = self.placed_ancestor(i)
+        if not anchor or anchor in self.lab.gone:
+            return None
+        r, g = self.P[anchor], self.res.geo[anchor]
+        if not (self.lab.rooms.get(r.get("room")) or {}).get("poly") or layout.FILL.get(r.get("category")) == "none" \
+                or g.z[1] - g.z[0] <= 0:
+            return None
+        return f"{root}rooms/{fname(r['room'])}-3d.html#{anchor}"
 
     # --- content ------------------------------------------------------------------------------------------
 
@@ -497,9 +515,8 @@ class Site:
         if svg_:
             where = "" if anchor == i else f" <span class='note'>(shown: {self.a(anchor, root)})</span>" if anchor else \
                 (" <span class='note'>(decommissioned)</span>" if i in self.lab.gone else " <span class='note'>(not placed yet)</span>")
-            in3d = (f" · <a href='{root}rooms/{fname(r['room'])}-3d.html#{esc(anchor)}'>see it in 3D</a>"
-                    if anchor and (self.lab.rooms.get(r.get("room")) or {}).get("poly") and self.res.geo.get(anchor)
-                    else "")
+            to3d = self.link3d(i, root)
+            in3d = f" · <a href='{esc(to3d)}'>see it in 3D</a>" if to3d else ""
             body.append(f"<h2 id='where'>Where</h2><p class='where'>{self.crumbs(i, root)}{where}{in3d}</p>{svg_}")
         self.page(f"o/{fname(i)}.html", f"{i} {r.get('name') or ''}", "".join(body), root, style)
 
@@ -571,9 +588,10 @@ class Site:
     def search_index(self):
         entries = []
 
-        def add(t, i, name, where, url, syn="", extra=""):
+        def add(t, i, name, where, url, syn="", extra="", in3d=None):
             entries.append(dict(t=t, id=i, name=name or i, w=where, u=url, k=fold(i), n=fold(name), s=fold(syn),
-                                h=fold(" ".join(str(x) for x in (i, name, syn, extra, where) if x))))
+                                h=fold(" ".join(str(x) for x in (i, name, syn, extra, where) if x)),
+                                **({"d": in3d} if in3d else {})))  # straight to it in 3D, where there is a 3D
 
         loc = lambda i: re.sub(r"<[^>]+>", "", self.crumbs(i, ""))  # noqa: E731
         for i, r in self.P.items():
@@ -582,17 +600,19 @@ class Site:
             e = self.E.get(i, {})
             add("object", i, r.get("name"), loc(i), f"o/{fname(i)}.html",
                 extra=" ".join(str(x) for x in (r.get("category"), e.get("maker"), e.get("model"), e.get("owner"),
-                                                e.get("workflow"), r.get("notes")) if x))
+                                                e.get("workflow"), r.get("notes")) if x), in3d=self.link3d(i, ""))
         for i, it in self.lab.items.items():
             c = it.get("container")
             add("item", i, it.get("name"), loc(c) if c else it.get("elsewhere") or "", self.href(i, "") or "",
                 it.get("synonyms") or "",
                 " ".join(str(x) for x in (it.get("category"), it.get("notes"), it.get("owner"), it.get("rs_part"),
                                           "RS" if it.get("rs_part") else "", "spare for",
-                                          " ".join(it.get("spare_for") or [])) if x and (x != "spare for" or it.get("spare_for"))))
+                                          " ".join(it.get("spare_for") or [])) if x and (x != "spare for" or it.get("spare_for"))),
+                in3d=self.link3d(c, "") if c else None)
         for i, s in self.S.items():
             add("socket", i, f"{s.get('type')} {i}", loc(i), f"s/{fname(i)}.html",
-                extra=" ".join(str(x) for x in (s.get("medium"), self.res.circuit_of.get(i), s.get("notes")) if x))
+                extra=" ".join(str(x) for x in (s.get("medium"), self.res.circuit_of.get(i), s.get("notes")) if x),
+                in3d=self.link3d(s["parent"], "") if s.get("parent") else None)  # what it's fixed to, if anything
         for i, d in self.lab.documents.items():
             first = (d.get("applies_to") or [None])[0]
             url = self.href(first, "") + "#docs" if self.href(first, "") else "index.html"
