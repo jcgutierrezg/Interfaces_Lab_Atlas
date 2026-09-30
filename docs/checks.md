@@ -46,9 +46,15 @@ Two things keep the sheet honest. A row that no longer matches anything — some
 fixed — is a warning, *Accepted, but it doesn't happen any more*, until you delete it. And data problems (mistakes
 in the spreadsheet) can't be accepted: they're to be put right.
 
-**A workbook made before this sheet existed** doesn't have it. Open the blank `lab-data.xlsx` in this folder next
-to yours, right-click its `accepted` tab › *Move or Copy…*, pick your workbook under *To book*, tick *Create a
-copy*, and save. It has no dropdowns, so it brings no links back to the blank one with it.
+**A workbook made before this sheet existed** doesn't have it. Add a new sheet to yours, name it `accepted`, then
+open the blank `lab-data.xlsx` in this folder, select rows 1 and 2 of its `accepted` sheet (the names and the
+hints), copy them, and paste them into A1 of yours. Leave row 2 as it is: the checks read from row 3 down.
+
+Don't copy the whole sheet with *Move or Copy*: Excel takes every named range of the workbook it comes from
+along with it, and yours then asks to update links from that file every time it opens. If that has already
+happened: *Formulas › Name Manager* › *Filter* › *Names Scoped to Worksheet*, delete the `L_…` names scoped to
+`accepted` (not the ones scoped to the workbook, which your dropdowns use), save, and break the link in
+*Data › Edit Links* if it's still listed.
 
 `python -m unittest discover -s tests -t .` confirms the example still produces exactly its fourteen problems and
 nine warnings.
